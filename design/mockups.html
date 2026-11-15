@@ -1,0 +1,468 @@
+<!doctype html>
+<html lang="en" data-palette="obsidian">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pilcrow design</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible+Mono:wght@400;600&family=Atkinson+Hyperlegible+Next:ital,wght@0,400;0,600;0,700;1,400&display=swap" rel="stylesheet">
+<style>
+/* ------------------------------------------------------------------
+   Tokens. These are the app's tokens: the editor runs in a WebView,
+   so this block moves into the product unchanged.
+   ------------------------------------------------------------------ */
+:root {
+  --ui: "Atkinson Hyperlegible Next", system-ui, sans-serif;
+  --mono: "Atkinson Hyperlegible Mono", ui-monospace, monospace;
+}
+
+/* Proof — the proposal. Proofreader's pencils on layout paper. */
+[data-palette="proof"] [data-theme="light"] {
+  --paper: #F9FBFB;      /* layout paper */
+  --surface: #EDF1F2;
+  --key: #FFFFFF;
+  --ink: #22272B;        /* graphite */
+  --ink-2: #616B72;
+  --ink-3: #98A2A8;
+  --rule: #DCE2E5;
+  --mark: #0E7896;       /* blue pencil: every Markdown mark */
+  --mark-tint: #A4DDED;  /* non-photo blue */
+  --wash: #EEF6F8;
+  --caret: #D63F31;      /* red pencil: the cursor, and anything unsaved */
+}
+[data-palette="proof"] [data-theme="dark"] {
+  --paper: #000000;      /* true black: the phone has an OLED screen */
+  --surface: #14181A;
+  --key: #2A3034;
+  --ink: #DDE2E5;
+  --ink-2: #8D979D;
+  --ink-3: #5E676D;
+  --rule: #23292D;
+  --mark: #A4DDED;
+  --mark-tint: #1B4350;
+  --wash: #0B1B21;
+  --caret: #FF6A5B;
+}
+
+/* The user's own Obsidian theme, for comparison. */
+[data-palette="obsidian"] [data-theme="light"] {
+  --paper: #F9F3E7;
+  --surface: #F0E9DA;
+  --key: #FFFBF2;
+  --ink: #34322C;
+  --ink-2: #6E6A5C;
+  --ink-3: #9A9684;
+  --rule: #E6E3D8;
+  --mark: #B0532F;
+  --mark-tint: #F1DCC4;
+  --wash: #F5EBDD;
+  --caret: #C15F3C;
+}
+[data-palette="obsidian"] [data-theme="dark"] {
+  --paper: #262624;
+  --surface: #1F1E1D;
+  --key: #393833;
+  --ink: #E6E4DC;
+  --ink-2: #A8A496;
+  --ink-3: #767264;
+  --rule: #393833;
+  --mark: #E8916F;
+  --mark-tint: #3A3128;
+  --wash: #2E2B27;
+  --caret: #D97757;
+}
+
+[data-palette="proof"]    { --icon-bg: #A4DDED; --icon-ink: #22272B; --icon-caret: #D63F31; }
+[data-palette="obsidian"] { --icon-bg: #262624; --icon-ink: #F6F4EE; --icon-caret: #D97757; }
+
+/* ------------------------------------------------------------------
+   The page around the mockups (not part of the app)
+   ------------------------------------------------------------------ */
+* { box-sizing: border-box; }
+html { background: #E6EAEC; color: #22272B; }
+body { margin: 0; font-family: var(--ui); font-size: 16px; line-height: 1.5; }
+.page { max-width: 1620px; margin: 0 auto; padding: 40px 32px 80px; }
+.page-head { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 20px 40px; margin-bottom: 44px; }
+.page-head h1 { font-size: 34px; line-height: 1.15; margin: 0 0 6px; font-weight: 700; letter-spacing: -0.01em; }
+.page-head p { margin: 0; max-width: 58ch; color: #4B555C; }
+.switch { display: inline-flex; padding: 4px; border-radius: 12px; background: #D5DBDE; }
+.switch button { font: 600 14px/1 var(--ui); padding: 10px 14px; border: 0; border-radius: 9px; background: transparent; color: #4B555C; cursor: pointer; }
+.switch button[aria-pressed="true"] { background: #FFFFFF; color: #22272B; }
+.switch button:focus-visible, .switch button:hover { outline: 2px solid #0E7896; outline-offset: 2px; }
+h2.sec { font-size: 21px; line-height: 1.25; margin: 56px 0 6px; font-weight: 700; }
+p.sec-note { margin: 0 0 22px; max-width: 70ch; color: #4B555C; }
+.row { display: flex; gap: 24px; overflow-x: auto; padding: 4px 2px 18px; }
+figure { margin: 0; flex: none; }
+figcaption { margin-top: 12px; font-size: 14px; color: #4B555C; max-width: 340px; }
+figcaption b { color: #22272B; font-weight: 600; }
+
+/* logo board */
+.logo-board { display: flex; flex-wrap: wrap; align-items: center; gap: 36px 56px; background: #F4F6F7; border-radius: 20px; padding: 36px 40px; }
+.tile { background: var(--icon-bg); border-radius: 27%; display: grid; place-items: center; flex: none; --g-ink: var(--icon-ink); --g-caret: var(--icon-caret); }
+.tile svg { width: 100%; height: 100%; }
+.tile.mono { background: #22272B; --g-ink: #F4F6F7; --g-caret: #F4F6F7; }
+.tile.line { background: #FFFFFF; --g-ink: #22272B; --g-caret: #22272B; box-shadow: inset 0 0 0 1px #D5DBDE; }
+.sizes { display: flex; align-items: flex-end; gap: 18px; }
+.lockup { display: flex; align-items: center; gap: 10px; font-weight: 700; font-size: 40px; letter-spacing: -0.015em; --g-ink: #22272B; --g-caret: var(--icon-caret); }
+.lockup svg { width: 54px; height: 54px; margin: 0 -8px 0 -12px; }
+.logo-note { flex: 1 1 260px; color: #4B555C; font-size: 15px; max-width: 46ch; }
+.g-ink { fill: var(--g-ink, currentColor); }
+.g-caret { fill: var(--g-caret, currentColor); }
+
+.only { display: none; }
+[data-palette="proof"] .only.proof, [data-palette="obsidian"] .only.obsidian { display: block; }
+
+/* swatches */
+.chips { display: none; flex-wrap: wrap; gap: 12px; }
+[data-palette="proof"] .chips.proof, [data-palette="obsidian"] .chips.obsidian { display: flex; }
+.chip { width: 172px; border-radius: 12px; background: #F4F6F7; overflow: hidden; font-size: 13.5px; }
+.chip i { display: block; height: 56px; }
+.chip span { display: block; padding: 8px 12px 10px; color: #4B555C; }
+.chip b { display: block; color: #22272B; font-weight: 600; }
+.type-spec { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px; margin-top: 16px; }
+.type-card { background: #F4F6F7; border-radius: 12px; padding: 18px 20px; }
+.type-card .big { font-size: 28px; line-height: 1.2; font-weight: 700; }
+.type-card .mono { font-family: var(--mono); font-size: 22px; line-height: 1.3; }
+.type-card p { margin: 8px 0 0; font-size: 14px; color: #4B555C; }
+
+/* ------------------------------------------------------------------
+   The app
+   ------------------------------------------------------------------ */
+.phone {
+  width: 340px; height: 736px; box-sizing: content-box;
+  border: 9px solid #0E1012; border-radius: 40px; overflow: hidden;
+  background: var(--paper); color: var(--ink);
+  font-family: var(--ui); font-size: 16px; line-height: 1.5;
+  display: flex; flex-direction: column; position: relative;
+}
+.statusbar { height: 30px; flex: none; display: flex; align-items: center; justify-content: space-between; padding: 0 20px; font-size: 12.5px; font-weight: 600; color: var(--ink); }
+.statusbar::after { content: ""; position: absolute; top: 9px; left: 50%; width: 11px; height: 11px; margin-left: -5.5px; border-radius: 50%; background: #0E1012; }
+[data-palette="proof"] [data-theme="dark"] .statusbar::after { background: #1A1F22; }
+.statusbar .batt { width: 22px; height: 10px; border-radius: 3px; border: 1.5px solid var(--ink-2); position: relative; }
+.statusbar .batt::after { content: ""; position: absolute; inset: 1.5px 6px 1.5px 1.5px; background: var(--ink-2); border-radius: 1px; }
+.navpill { position: absolute; left: 50%; bottom: 7px; width: 108px; height: 4px; margin-left: -54px; border-radius: 2px; background: var(--ink-3); opacity: .7; }
+
+/* app bar */
+.appbar { height: 56px; flex: none; display: flex; align-items: center; padding: 0 6px 0 4px; gap: 2px; }
+.iconbtn { width: 44px; height: 44px; flex: none; display: grid; place-items: center; border-radius: 50%; color: var(--ink); }
+.iconbtn svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; }
+.appbar .title { flex: 1; min-width: 0; padding: 0 4px; }
+.appbar .name { font-size: 16px; font-weight: 600; line-height: 1.25; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.appbar .state { font-size: 12.5px; line-height: 1.3; color: var(--ink-2); }
+.appbar .state.unsaved { color: var(--caret); }
+/* The view switch is the logo: the pilcrow is the proofreader's "show the marks" sign. */
+.marks { width: 40px; height: 40px; flex: none; border-radius: 12px; display: grid; place-items: center; --g-ink: var(--ink-2); --g-caret: var(--ink-2); }
+.marks svg { width: 30px; height: 30px; }
+.marks.on { background: var(--mark-tint); --g-ink: var(--ink); --g-caret: var(--caret); }
+[data-theme="dark"] .marks.on { --g-ink: var(--mark); }
+
+/* formatted view */
+.doc { flex: 1; min-height: 0; overflow: hidden; padding: 6px 18px 0 34px; position: relative; z-index: 0; }
+.doc p, .doc h1, .doc h2 { margin: 0; }
+.doc .ln { position: relative; }
+.doc h1 { font-size: 28px; line-height: 1.2; font-weight: 700; letter-spacing: -0.012em; margin: 4px 0 10px; }
+.doc h2 { font-size: 21px; line-height: 1.3; font-weight: 700; margin: 22px 0 8px; }
+.doc p { margin-bottom: 10px; }
+.doc .wl { color: var(--mark); text-decoration: underline dotted; text-underline-offset: 3px; }
+.doc .mk { color: var(--mark); font-weight: 400; }
+/* block marks hang in the margin, so the words never jump sideways */
+.gm { position: absolute; left: -34px; width: 28px; text-align: right; color: var(--mark); font-family: var(--mono); font-weight: 400; font-size: 13px; line-height: 1; letter-spacing: 0; }
+.doc h1 .gm { top: 12px; } .doc h2 .gm { top: 8px; } .doc p .gm, .task .gm { top: 6px; }
+.active::before { content: ""; position: absolute; top: -3px; bottom: -3px; left: -34px; right: -18px; background: var(--wash); z-index: -1; }
+.caret { display: inline-block; width: 2px; height: 1.12em; margin: 0 0 -0.18em 1px; border-radius: 1px; background: var(--caret); animation: blink 1.1s steps(1) infinite; }
+@keyframes blink { 50% { opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .caret { animation: none; } }
+.props { display: flex; align-items: center; justify-content: space-between; margin: 2px 0 14px -16px; padding: 7px 10px 7px 16px; border-radius: 9px; background: var(--surface); font-size: 13.5px; color: var(--ink-2); }
+.props svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.task { position: relative; display: flex; gap: 11px; margin-bottom: 7px; }
+.box { width: 19px; height: 19px; flex: none; margin-top: 2.5px; border: 1.6px solid var(--ink-3); border-radius: 5.5px; display: grid; place-items: center; }
+.box svg { width: 13px; height: 13px; fill: none; stroke: var(--paper); stroke-width: 2.6; stroke-linecap: round; stroke-linejoin: round; display: none; }
+.task.done .box { background: var(--mark); border-color: var(--mark); }
+.task.done .box svg { display: block; }
+.task.done span { color: var(--ink-3); text-decoration: line-through; text-decoration-thickness: 1px; }
+.bul { position: relative; padding-left: 18px; margin-bottom: 6px; }
+.bul::before { content: ""; position: absolute; left: 3px; top: .62em; width: 5px; height: 5px; border-radius: 50%; background: var(--ink-2); }
+.tbl { width: 100%; border-collapse: collapse; font-size: 14.5px; line-height: 1.35; font-variant-numeric: tabular-nums; margin-top: 2px; }
+.tbl th { text-align: left; font-weight: 600; padding: 5px 12px 6px 0; border-bottom: 1.5px solid var(--ink); }
+.tbl td { padding: 8px 12px 8px 0; border-bottom: 1px solid var(--rule); }
+.tbl th:last-child, .tbl td:last-child { padding-right: 0; }
+
+/* source view */
+.src { flex: 1; min-height: 0; overflow: hidden; margin: 0; padding: 8px 14px 0 18px; font-family: var(--mono); font-size: 12.4px; line-height: 1.62; white-space: pre-wrap; color: var(--ink); }
+.src .m { color: var(--mark); }
+.src .dim { color: var(--ink-2); }
+.src .hd { font-weight: 600; }
+
+/* formatting bar and keyboard */
+.fmt { height: 46px; flex: none; display: flex; align-items: center; padding: 0 6px; border-top: 1px solid var(--rule); color: var(--ink-2); }
+.fmt .fb { width: 38px; height: 40px; display: grid; place-items: center; font-size: 17px; font-weight: 600; }
+.fmt .fb svg { width: 21px; height: 21px; fill: none; stroke: currentColor; stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; }
+.fmt .fb.i { font-style: italic; font-weight: 400; }
+.fmt .gap { margin-left: auto; }
+.kb { flex: none; background: var(--surface); padding: 8px 4px 26px; display: grid; gap: 7px; }
+.kb .kr { display: flex; justify-content: center; gap: 5px; }
+.kb .k { width: 28.5px; height: 40px; border-radius: 6px; background: var(--key); display: grid; place-items: center; font-size: 16px; color: var(--ink); }
+.kb .k.w { width: 42px; background: transparent; box-shadow: inset 0 0 0 1px var(--rule); }
+.kb .k.sp { width: 168px; }
+
+/* home */
+.home-head { height: 64px; flex: none; display: flex; align-items: center; padding: 0 8px 0 12px; }
+.brand { flex: 1; display: flex; align-items: center; font-size: 23px; font-weight: 700; letter-spacing: -0.012em; --g-ink: var(--ink); --g-caret: var(--caret); }
+.brand svg { width: 38px; height: 38px; margin-right: -4px; }
+.home-list { flex: 1; min-height: 0; overflow: hidden; padding: 8px 20px 0; }
+.home-list h2 { margin: 0 0 4px; font-size: 14.5px; font-weight: 400; color: var(--ink-2); }
+.note { display: flex; align-items: baseline; gap: 12px; padding: 13px 0 12px; border-bottom: 1px solid var(--rule); }
+.note .n { flex: 1; min-width: 0; }
+.note .n b { display: block; font-weight: 600; font-size: 16.5px; line-height: 1.3; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.note .n span { display: block; font-size: 13.5px; color: var(--ink-2); }
+.note .n span.unsaved { color: var(--caret); }
+.note time { font-size: 13.5px; color: var(--ink-2); flex: none; }
+.home-actions { flex: none; padding: 12px 20px 30px; display: grid; gap: 10px; }
+.btn { height: 52px; border-radius: 15px; display: grid; place-items: center; font-size: 16.5px; font-weight: 600; }
+.btn.primary { background: var(--ink); color: var(--paper); }
+.btn.quiet { height: 48px; box-shadow: inset 0 0 0 1.5px var(--rule); color: var(--ink); }
+</style>
+</head>
+<body>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="pilcrow" viewBox="0 0 96 96">
+    <path class="g-ink" d="M54 20H43a17 17 0 0 0 0 34h3v24h8z"/>
+    <rect class="g-caret" x="63" y="15" width="7" height="66" rx="3.5"/>
+  </symbol>
+  <symbol id="i-back" viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></symbol>
+  <symbol id="i-more" viewBox="0 0 24 24"><path d="M12 5.5v.01M12 12v.01M12 18.5v.01" stroke-width="2.6"/></symbol>
+  <symbol id="i-check" viewBox="0 0 14 14"><path d="M2.5 7.4l3 3 6-6.6"/></symbol>
+  <symbol id="i-down" viewBox="0 0 16 16"><path d="M4 6l4 4 4-4"/></symbol>
+  <symbol id="i-box" viewBox="0 0 24 24"><rect x="4.5" y="4.5" width="15" height="15" rx="4"/><path d="M8.5 12.3l2.6 2.6 4.6-5.2"/></symbol>
+  <symbol id="i-list" viewBox="0 0 24 24"><path d="M9.5 7h10M9.5 12h10M9.5 17h10"/><path d="M5 7v.01M5 12v.01M5 17v.01" stroke-width="2.8"/></symbol>
+  <symbol id="i-num" viewBox="0 0 24 24"><path d="M10.5 7h9M10.5 12h9M10.5 17h9"/><path d="M4.4 5.6l1.4-.8V9M4.2 14.6c.2-1.1 2.6-1.2 2.5.2-.1.9-1.6 1.6-2.6 2.7h2.8" stroke-width="1.5"/></symbol>
+  <symbol id="i-in" viewBox="0 0 24 24"><path d="M4 6h16M11 12h9M4 18h16M4 9.5l3 2.5-3 2.5"/></symbol>
+  <symbol id="i-out" viewBox="0 0 24 24"><path d="M4 6h16M11 12h9M4 18h16M7.5 9.5l-3 2.5 3 2.5"/></symbol>
+  <symbol id="i-undo" viewBox="0 0 24 24"><path d="M8 5L4 9l4 4"/><path d="M4.5 9H14a5 5 0 0 1 0 10h-3"/></symbol>
+  <symbol id="i-redo" viewBox="0 0 24 24"><path d="M16 5l4 4-4 4"/><path d="M19.5 9H10a5 5 0 0 0 0 10h3"/></symbol>
+</svg>
+
+<div class="page">
+
+  <header class="page-head">
+    <div>
+      <h1>Pilcrow</h1>
+      <p>The look of the Markdown editor: a logo, three screens, light and dark. Pilcrow is a proposed name; the pilcrow (¶) is the proofreader's sign for "show me the marks", which is what this app's main button does.</p>
+    </div>
+    <div class="switch" role="group" aria-label="Palette">
+      <button type="button" data-set="obsidian" aria-pressed="true">Your Obsidian theme (chosen)</button>
+      <button type="button" data-set="proof" aria-pressed="false">Proof</button>
+    </div>
+  </header>
+
+  <h2 class="sec">Logo</h2>
+  <p class="sec-note">A pilcrow whose second stroke is the text cursor. The same shape is the button that switches between the formatted view and the Markdown source.</p>
+  <div class="logo-board">
+    <div class="tile" style="width:168px;height:168px"><svg><use href="#pilcrow"/></svg></div>
+    <div class="sizes">
+      <div class="tile" style="width:72px;height:72px"><svg><use href="#pilcrow"/></svg></div>
+      <div class="tile" style="width:48px;height:48px"><svg><use href="#pilcrow"/></svg></div>
+      <div class="tile" style="width:28px;height:28px"><svg><use href="#pilcrow"/></svg></div>
+    </div>
+    <div class="sizes">
+      <div class="tile mono" style="width:72px;height:72px"><svg><use href="#pilcrow"/></svg></div>
+      <div class="tile line" style="width:72px;height:72px"><svg><use href="#pilcrow"/></svg></div>
+    </div>
+    <div class="lockup"><svg><use href="#pilcrow"/></svg>Pilcrow</div>
+    <p class="logo-note">Left to right: the app icon, the icon at home-screen sizes, the one-colour versions for Android's themed icons, and the name next to the mark.</p>
+  </div>
+
+  <h2 class="sec">Light</h2>
+  <p class="sec-note only proof">Markdown marks are always the blue pencil. The cursor is always the red pencil, and so is anything that is not saved yet. Nothing else has colour.</p>
+  <p class="sec-note only obsidian">The same screens in the colours of your Obsidian theme: cream surface, coral for the marks and the cursor.</p>
+  <div class="row" data-theme-row="light"></div>
+
+  <h2 class="sec">Dark</h2>
+  <p class="sec-note only proof">True black, because the phone has an OLED screen: black pixels are switched off.</p>
+  <p class="sec-note only obsidian">The warm dark surface of your Obsidian theme.</p>
+  <div class="row" data-theme-row="dark"></div>
+
+  <h2 class="sec">Colour and type</h2>
+  <p class="sec-note">One type family in two widths. Switching to Source changes the spacing of the letters, not the letters, so the note still looks like the same note.</p>
+  <div class="chips proof">
+    <div class="chip"><i style="background:#F9FBFB;box-shadow:inset 0 -1px #DCE2E5"></i><span><b>Layout paper</b>#F9FBFB</span></div>
+    <div class="chip"><i style="background:#22272B"></i><span><b>Graphite</b>#22272B</span></div>
+    <div class="chip"><i style="background:#0E7896"></i><span><b>Blue pencil</b>#0E7896</span></div>
+    <div class="chip"><i style="background:#A4DDED"></i><span><b>Non-photo blue</b>#A4DDED</span></div>
+    <div class="chip"><i style="background:#D63F31"></i><span><b>Red pencil</b>#D63F31</span></div>
+    <div class="chip"><i style="background:#000000"></i><span><b>Screen off</b>#000000</span></div>
+  </div>
+  <div class="chips obsidian">
+    <div class="chip"><i style="background:#F9F3E7;box-shadow:inset 0 -1px #E6E3D8"></i><span><b>Note surface</b>#F9F3E7</span></div>
+    <div class="chip"><i style="background:#34322C"></i><span><b>Text</b>#34322C</span></div>
+    <div class="chip"><i style="background:#B0532F"></i><span><b>Link coral</b>#B0532F</span></div>
+    <div class="chip"><i style="background:#F1DCC4"></i><span><b>Table header</b>#F1DCC4</span></div>
+    <div class="chip"><i style="background:#C15F3C"></i><span><b>Accent</b>#C15F3C</span></div>
+    <div class="chip"><i style="background:#262624"></i><span><b>Dark surface</b>#262624</span></div>
+  </div>
+  <div class="type-spec">
+    <div class="type-card"><div class="big">Weekly review</div><p>Atkinson Hyperlegible Next. Notes, headings and every button. Sizes 13.5, 16, 21, 28.</p></div>
+    <div class="type-card"><div class="mono">## Weekly review</div><p>Atkinson Hyperlegible Mono. The Source view and the marks in the margin.</p></div>
+  </div>
+</div>
+
+<!-- ============ screens ============ -->
+
+<template id="t-home">
+  <figure>
+    <div class="phone">
+      <div class="statusbar"><span>10:24</span><span class="batt"></span></div>
+      <div class="home-head">
+        <div class="brand"><svg><use href="#pilcrow"/></svg>Pilcrow</div>
+        <div class="iconbtn"><svg><use href="#i-more"/></svg></div>
+      </div>
+      <div class="home-list">
+        <h2>Recently opened</h2>
+        <div class="note"><div class="n"><b>Quick note</b><span>My Drive</span></div><time>12 min ago</time></div>
+        <div class="note"><div class="n"><b>Weekly review</b><span>My Drive › Notes</span></div><time>2 h ago</time></div>
+        <div class="note"><div class="n"><b>Content calendar</b><span class="unsaved">Unsaved changes from 14:02</span></div><time>Yesterday</time></div>
+        <div class="note"><div class="n"><b>Reading list</b><span>My Drive › Notes</span></div><time>3 Nov</time></div>
+        <div class="note"><div class="n"><b>Ideas for the newsletter</b><span>My Drive › Journal</span></div><time>28 Oct</time></div>
+      </div>
+      <div class="home-actions">
+        <div class="btn primary">Open from Drive</div>
+        <div class="btn quiet">New note</div>
+      </div>
+      <div class="navpill"></div>
+    </div>
+    <figcaption><b>Home.</b> The notes you opened last, and two actions within reach of the thumb. A note with text that did not reach Drive says so in red.</figcaption>
+  </figure>
+</template>
+
+<template id="t-read">
+  <figure>
+    <div class="phone">
+      <div class="statusbar"><span>10:24</span><span class="batt"></span></div>
+      <div class="appbar">
+        <div class="iconbtn"><svg><use href="#i-back"/></svg></div>
+        <div class="title"><div class="name">Weekly review</div><div class="state">Saved to Drive</div></div>
+        <div class="marks"><svg><use href="#pilcrow"/></svg></div>
+        <div class="iconbtn"><svg><use href="#i-more"/></svg></div>
+      </div>
+      <div class="doc">
+        <div class="props"><span>3 properties</span><svg><use href="#i-down"/></svg></div>
+        <h1 class="ln">Weekly review</h1>
+        <p class="ln">Notes from Monday's call. The open points are in <span class="wl">Content calendar</span>.</p>
+        <h2 class="ln">This week</h2>
+        <div class="task done"><div class="box"><svg><use href="#i-check"/></svg></div><span>Send the invoice</span></div>
+        <div class="task"><div class="box"><svg><use href="#i-check"/></svg></div><span>Draft the launch thread</span></div>
+        <div class="task"><div class="box"><svg><use href="#i-check"/></svg></div><span>Check the banner sizes with <b>Mara</b></span></div>
+        <h2 class="ln">Posts</h2>
+        <table class="tbl">
+          <tr><th>Post</th><th>Channel</th><th>Status</th></tr>
+          <tr><td>Launch thread</td><td>X</td><td>Draft</td></tr>
+          <tr><td>Server banner</td><td>Discord</td><td>Ready</td></tr>
+          <tr><td>October recap</td><td>Blog</td><td>Idea</td></tr>
+        </table>
+      </div>
+      <div class="navpill"></div>
+    </div>
+    <figcaption><b>Formatted.</b> No Markdown marks in sight. Tap a checkbox to tick it; tap the table to edit it.</figcaption>
+  </figure>
+</template>
+
+<template id="t-write">
+  <figure>
+    <div class="phone">
+      <div class="statusbar"><span>10:25</span><span class="batt"></span></div>
+      <div class="appbar">
+        <div class="iconbtn"><svg><use href="#i-back"/></svg></div>
+        <div class="title"><div class="name">Weekly review</div><div class="state">Saving…</div></div>
+        <div class="marks"><svg><use href="#pilcrow"/></svg></div>
+        <div class="iconbtn"><svg><use href="#i-more"/></svg></div>
+      </div>
+      <div class="doc">
+        <p class="ln">Notes from Monday's call. The open points are in <span class="wl">Content calendar</span>.</p>
+        <h2 class="ln active"><span class="gm">##</span>This week and next<i class="caret"></i></h2>
+        <div class="task done"><div class="box"><svg><use href="#i-check"/></svg></div><span>Send the invoice</span></div>
+        <div class="task"><div class="box"><svg><use href="#i-check"/></svg></div><span>Draft the launch thread</span></div>
+        <div class="task"><div class="box"><svg><use href="#i-check"/></svg></div><span>Check the banner sizes with <b>Mara</b></span></div>
+        <h2 class="ln">Posts</h2>
+      </div>
+      <div class="fmt">
+        <div class="fb">H</div><div class="fb">B</div><div class="fb i">I</div>
+        <div class="fb"><svg><use href="#i-box"/></svg></div>
+        <div class="fb"><svg><use href="#i-list"/></svg></div>
+        <div class="fb"><svg><use href="#i-in"/></svg></div>
+        <div class="fb gap"><svg><use href="#i-undo"/></svg></div>
+        <div class="fb"><svg><use href="#i-redo"/></svg></div>
+      </div>
+      <div class="kb">
+        <div class="kr"><span class="k">q</span><span class="k">w</span><span class="k">e</span><span class="k">r</span><span class="k">t</span><span class="k">y</span><span class="k">u</span><span class="k">i</span><span class="k">o</span><span class="k">p</span></div>
+        <div class="kr"><span class="k">a</span><span class="k">s</span><span class="k">d</span><span class="k">f</span><span class="k">g</span><span class="k">h</span><span class="k">j</span><span class="k">k</span><span class="k">l</span></div>
+        <div class="kr"><span class="k w">⇧</span><span class="k">z</span><span class="k">x</span><span class="k">c</span><span class="k">v</span><span class="k">b</span><span class="k">n</span><span class="k">m</span><span class="k w">⌫</span></div>
+        <div class="kr"><span class="k w">?123</span><span class="k">,</span><span class="k sp"></span><span class="k">.</span><span class="k w">↵</span></div>
+      </div>
+      <div class="navpill"></div>
+    </div>
+    <figcaption><b>Writing.</b> The mark of the line you are on shows in the margin, so the words do not jump sideways when you tap a heading.</figcaption>
+  </figure>
+</template>
+
+<template id="t-source">
+  <figure>
+    <div class="phone">
+      <div class="statusbar"><span>10:26</span><span class="batt"></span></div>
+      <div class="appbar">
+        <div class="iconbtn"><svg><use href="#i-back"/></svg></div>
+        <div class="title"><div class="name">Weekly review</div><div class="state">Saved to Drive</div></div>
+        <div class="marks on"><svg><use href="#pilcrow"/></svg></div>
+        <div class="iconbtn"><svg><use href="#i-more"/></svg></div>
+      </div>
+<pre class="src"><span class="dim">---
+type: review
+week: 46
+status: open
+---</span>
+
+<span class="hd"><span class="m">#</span> Weekly review</span>
+
+Notes from Monday's call. The open points are in <span class="m">[[</span>Content calendar<span class="m">]]</span>.
+
+<span class="hd"><span class="m">##</span> This week</span>
+
+<span class="m">- [x]</span> Send the invoice
+<span class="m">- [ ]</span> Draft the launch thread
+<span class="m">- [ ]</span> Check the banner sizes with <span class="m">**</span>Mara<span class="m">**</span>
+
+<span class="hd"><span class="m">##</span> Posts</span>
+
+<span class="m">|</span> Post          <span class="m">|</span> Channel <span class="m">|</span> Status <span class="m">|</span>
+<span class="m">| ------------- | ------- | ------ |</span>
+<span class="m">|</span> Launch thread <span class="m">|</span> X       <span class="m">|</span> Draft  <span class="m">|</span>
+<span class="m">|</span> Server banner <span class="m">|</span> Discord <span class="m">|</span> Ready  <span class="m">|</span>
+<span class="m">|</span> October recap <span class="m">|</span> Blog    <span class="m">|</span> Idea   <span class="m">|</span></pre>
+      <div class="navpill"></div>
+    </div>
+    <figcaption><b>Source.</b> The ¶ button is on: the same note, every mark shown, exactly as it is stored on Drive.</figcaption>
+  </figure>
+</template>
+
+<script>
+  // Build each row from the four screen templates.
+  document.querySelectorAll('[data-theme-row]').forEach(function (row) {
+    ['t-home', 't-read', 't-write', 't-source'].forEach(function (id) {
+      var node = document.getElementById(id).content.cloneNode(true);
+      node.querySelector('.phone').setAttribute('data-theme', row.dataset.themeRow);
+      row.appendChild(node);
+    });
+  });
+  // Palette comparison.
+  var buttons = document.querySelectorAll('.switch button');
+  function setPalette(name) {
+    document.documentElement.setAttribute('data-palette', name);
+    buttons.forEach(function (b) { b.setAttribute('aria-pressed', String(b.dataset.set === name)); });
+  }
+  buttons.forEach(function (b) { b.addEventListener('click', function () { setPalette(b.dataset.set); }); });
+  var wanted = new URLSearchParams(location.search).get('palette');
+  if (wanted === 'obsidian' || wanted === 'proof') setPalette(wanted);
+</script>
+</body>
+</html>

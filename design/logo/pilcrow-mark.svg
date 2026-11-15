@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 96" width="384" height="384">
+  <!-- The mark alone: a pilcrow whose second stroke is the text cursor.
+       The bowl and stem take the text colour; the cursor is the coral accent. -->
+  <path fill="#34322C" d="M54 20H43a17 17 0 0 0 0 34h3v24h8z"/>
+  <rect fill="#C15F3C" x="63" y="15" width="7" height="66" rx="3.5"/>
+</svg>

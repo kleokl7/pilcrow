@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 108 108" width="432" height="432">
+  <!-- App icon, chosen palette (the user's Obsidian theme). 108 x 108 is Android's
+       adaptive-icon canvas; the mark sits inside the 66 x 66 safe zone. -->
+  <rect width="108" height="108" fill="#262624"/>
+  <g transform="translate(15 15) scale(0.8125)">
+    <path fill="#F6F4EE" d="M54 20H43a17 17 0 0 0 0 34h3v24h8z"/>
+    <rect fill="#D97757" x="63" y="15" width="7" height="66" rx="3.5"/>
+  </g>
+</svg>

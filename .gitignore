@@ -1,0 +1,15 @@
+# build output
+build/
+*.apk
+*.aab
+.gradle/
+local.properties
+node_modules/
+dist/
+
+# signing keys never go in git
+*.jks
+*.keystore
+keystore.properties
+
+.DS_Store

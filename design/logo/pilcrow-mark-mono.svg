@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 96" width="384" height="384">
+  <!-- One-colour version, for Android's themed icons and anywhere colour is not available. -->
+  <path fill="currentColor" d="M54 20H43a17 17 0 0 0 0 34h3v24h8z"/>
+  <rect fill="currentColor" x="63" y="15" width="7" height="66" rx="3.5"/>
+</svg>
