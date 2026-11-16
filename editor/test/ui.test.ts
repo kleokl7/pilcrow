@@ -20,7 +20,7 @@ const settings = (over: Partial<Extract<NativeEvent, { type: "settings" }>> = {}
   type: "settings", viewMode: "formatted", lineNumbers: false, ...over,
 });
 const doc = (over: Partial<Extract<NativeEvent, { type: "document" }>> = {}): NativeEvent => ({
-  type: "document", token: "t1", name: "Weekly review.md", text: "# Title\n\nbody", readOnly: false, notice: null, draftOfferAt: null, ...over,
+  type: "document", token: "t1", name: "Weekly review.md", kind: "markdown", text: "# Title\n\nbody", readOnly: false, notice: null, draftOfferAt: null, ...over,
 });
 
 afterEach(() => vi.useRealTimers());

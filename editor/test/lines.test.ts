@@ -55,3 +55,10 @@ test("on the cursor line of a heading the margin keeps its mark; the number stay
   expect(heading.getAttribute("data-mark")).toBe("##");
   ed.destroy();
 });
+
+test("HTML source is coloured as HTML", () => {
+  const ed = createEditor({ ...base, doc: '<p class="a">x</p>', mode: "source", kind: "html" });
+  expect(ed.view.dom.querySelector(".pc-tok-tag")).not.toBeNull();
+  expect(ed.view.dom.querySelector(".pc-tok-attr")!.textContent).toBe("class");
+  ed.destroy();
+});

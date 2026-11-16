@@ -28,8 +28,8 @@ const HISTORY: Button[] = [
   { label: "Redo", face: icon('<path d="M16 5l4 4-4 4"/><path d="M19.5 9H10a5 5 0 0 0 0 10h3"/>'), run: redo },
 ];
 
-/** The formatting bar that sits directly above the keyboard. */
-export function createToolbar(opts: { editor: PilcrowEditor }): HTMLElement {
+/** The formatting bar that sits directly above the keyboard. Without `formatting`, only Undo and Redo. */
+export function createToolbar(opts: { editor: PilcrowEditor; formatting?: boolean }): HTMLElement {
   const bar = document.createElement("div");
   bar.className = "pc-toolbar";
   bar.setAttribute("role", "toolbar");
@@ -50,7 +50,8 @@ export function createToolbar(opts: { editor: PilcrowEditor }): HTMLElement {
       button.addEventListener("click", () => b.run(opts.editor.view));
     }
   };
-  group(FORMAT, "pc-tb-scroll");
+  if (opts.formatting ?? true) group(FORMAT, "pc-tb-scroll");
+  else bar.appendChild(document.createElement("div")).className = "pc-tb-space";
   group(HISTORY, "pc-tb-fixed");
   return bar;
 }

@@ -47,6 +47,7 @@ class Session(
     private var pending: Pending? = null
     private var openUriString: String? = null
     private var openName = ""
+    private var openKind = "markdown"
     private var controller: SaveController? = null
     private var offeredDraftId: String? = null
     private var copyBytes: ByteArray? = null
@@ -203,7 +204,7 @@ class Session(
         // A new document for the web side: the editor that showed the file is replaced, and its last
         // change, if one is still on its way, must not land on the restored text.
         retired[currentToken ?: ""] = Shown(uri, openName, current.currentText())
-        emit(documentEvent(newToken(), openName, text, readOnly = false, notice = null, draftOfferAt = null))
+        emit(documentEvent(newToken(), openName, openKind, text, readOnly = false, notice = null, draftOfferAt = null))
         current.restore(text, info.baseHash)
         drafts.discard(id)
     }
@@ -307,20 +308,21 @@ class Session(
         recents.touch(uri, meta.name, store.providerLabel(uri), persisted, now())
         openUriString = uri
         openName = meta.name
+        openKind = DocKind.of(meta.name, meta.mime)
 
         when (val decoded = TextCodec.decode(bytes)) {
             is DecodeResult.ReadOnly ->
-                emit(documentEvent(newToken(), meta.name, decoded.text, readOnly = true, notice = decoded.reason, draftOfferAt = null))
+                emit(documentEvent(newToken(), meta.name, openKind, decoded.text, readOnly = true, notice = decoded.reason, draftOfferAt = null))
             is DecodeResult.Ok -> {
                 val doc = decoded.doc
                 if (!canWrite) {
-                    emit(documentEvent(newToken(), meta.name, doc.text, readOnly = true, notice = NO_WRITE, draftOfferAt = null))
+                    emit(documentEvent(newToken(), meta.name, openKind, doc.text, readOnly = true, notice = NO_WRITE, draftOfferAt = null))
                     return
                 }
                 val offer = draftToOffer(uri, doc.text)
                 offeredDraftId = offer?.id
                 // The document first, so that the web side has a screen for the save state that follows.
-                emit(documentEvent(newToken(), meta.name, doc.text, readOnly = false, notice = null, draftOfferAt = offer?.updatedAt))
+                emit(documentEvent(newToken(), meta.name, openKind, doc.text, readOnly = false, notice = null, draftOfferAt = offer?.updatedAt))
                 controller = SaveController(store, drafts, scheduler, pause) { state ->
                     emit(JSONObject().put("type", "saveState").put("state", state.name.lowercase()))
                 }.also { it.open(uri, meta.name, bytes, meta, doc.eol, doc.bom) }
@@ -361,8 +363,8 @@ class Session(
         emit(JSONObject().put("type", "home").put("recents", rows))
     }
 
-    private fun documentEvent(token: String, name: String, text: String, readOnly: Boolean, notice: String?, draftOfferAt: Long?): JSONObject =
-        JSONObject().put("type", "document").put("token", token).put("name", name).put("text", text).put("readOnly", readOnly)
+    private fun documentEvent(token: String, name: String, kind: String, text: String, readOnly: Boolean, notice: String?, draftOfferAt: Long?): JSONObject =
+        JSONObject().put("type", "document").put("token", token).put("name", name).put("kind", kind).put("text", text).put("readOnly", readOnly)
             .put("notice", notice ?: JSONObject.NULL).put("draftOfferAt", draftOfferAt ?: JSONObject.NULL)
 
     private fun notice(message: String) {

@@ -6,12 +6,16 @@ import android.content.ClipboardManager
 import android.content.Intent
 import android.content.SharedPreferences
 import android.content.pm.ApplicationInfo
+import android.graphics.Bitmap
 import android.net.Uri
 import android.os.Bundle
 import android.os.Handler
 import android.os.HandlerThread
+import android.os.Message
 import android.provider.DocumentsContract
 import android.view.ViewGroup
+import android.webkit.JavascriptInterface
+import android.webkit.WebChromeClient
 import android.webkit.WebResourceRequest
 import android.webkit.WebResourceResponse
 import android.webkit.WebView
@@ -24,6 +28,8 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.webkit.WebViewAssetLoader
+import androidx.webkit.WebViewCompat
+import androidx.webkit.WebViewFeature
 import org.json.JSONObject
 import java.io.File
 import java.util.concurrent.CountDownLatch
@@ -35,11 +41,19 @@ import java.util.concurrent.TimeUnit
  *
  * Threads: the session, and with it every read and write of a Drive file, runs on its own thread, so a
  * slow provider cannot freeze the screen. Whatever the session asks of Android comes back to the main thread.
+ *
+ * Security: an HTML note runs in a frame of this WebView, so the bridge to Android must be out of its reach.
+ * The bridge is offered only to the app's own page (its origin, in the main frame), and every message is checked
+ * again on arrival. The HTML page is served from another address, sandboxed (see [PageServer]). Where this
+ * WebView is too old to limit the bridge by origin, the old bridge is used and HTML pages run no scripts at all.
  */
 class MainActivity : ComponentActivity(), Session.Effects {
 
     private lateinit var webView: WebView
     private lateinit var session: Session
+    private val pages = PageServer()
+    /** Whether HTML pages may run their scripts: only when the bridge is kept from them. */
+    private var pageScripts = false
     private val sessionThread = HandlerThread("pilcrow-session").apply { start() }
     private val sessionHandler = Handler(sessionThread.looper)
     @Volatile private var destroyed = false
@@ -90,15 +104,34 @@ class MainActivity : ComponentActivity(), Session.Effects {
             settings.allowFileAccess = false
             settings.allowContentAccess = false
             settings.textZoom = 100
-            addJavascriptInterface(Bridge(::onSession), "PilcrowNative")
+            // A link on an HTML page asks for a new window; onCreateWindow turns that into the browser.
+            settings.setSupportMultipleWindows(true)
             webViewClient = object : WebViewClient() {
-                override fun shouldInterceptRequest(view: WebView, request: WebResourceRequest): WebResourceResponse? =
-                    assets.shouldInterceptRequest(request.url)
+                override fun shouldInterceptRequest(view: WebView, request: WebResourceRequest): WebResourceResponse? {
+                    val url = request.url
+                    pages.serve(url.scheme, url.host, url.path)?.let { page ->
+                        return WebResourceResponse(page.mime, page.encoding, page.status, page.reason, page.headers, page.body.inputStream())
+                    }
+                    return assets.shouldInterceptRequest(url)
+                }
 
-                // The app is one page. Links are opened by the session, in the browser.
-                override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean = true
+                // The app is one page, and the HTML frame shows only pages from the page server.
+                // Links are opened by the session or by onCreateWindow, in the browser.
+                override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean =
+                    request.isForMainFrame || request.url.host != PageServer.HOST
+            }
+            webChromeClient = object : WebChromeClient() {
+                override fun onCreateWindow(view: WebView, isDialog: Boolean, isUserGesture: Boolean, resultMsg: Message): Boolean {
+                    // A page may not open anything by itself: only a tap opens the browser.
+                    if (!isUserGesture) return false
+                    val transport = resultMsg.obj as? WebView.WebViewTransport ?: return false
+                    transport.webView = linkCatcher()
+                    resultMsg.sendToTarget()
+                    return true
+                }
             }
         }
+        connectBridge(Bridge(::onSession) { ref, html -> showPage(ref, html) })
 
         val root = FrameLayout(this).apply {
             setBackgroundColor(getColor(R.color.paper))
@@ -162,7 +195,66 @@ class MainActivity : ComponentActivity(), Session.Effects {
         onSession { openUri(uri.toString(), canWrite, fromPicker = false) }
     }
 
-    /** Called on the session thread. */
+    /**
+     * Gives the bridge to the app's page only. With the web message listener, Android injects PilcrowNative into
+     * frames from the app's origin; the check below also refuses anything not sent by the main frame.
+     */
+    private fun connectBridge(bridge: Bridge) {
+        if (WebViewFeature.isFeatureSupported(WebViewFeature.WEB_MESSAGE_LISTENER)) {
+            WebViewCompat.addWebMessageListener(webView, "PilcrowNative", setOf(PageServer.APP_ORIGIN)) { _, message, origin, isMainFrame, _ ->
+                val data = message.data
+                if (isMainFrame && "${origin.scheme}://${origin.host}" == PageServer.APP_ORIGIN && origin.port == -1 && data != null) bridge.receive(data)
+            }
+            pageScripts = true
+        } else {
+            // This bridge reaches every frame, so HTML pages get no scripts (PageServer sandboxes them without).
+            webView.addJavascriptInterface(JsPort(bridge), "PilcrowNative")
+            pageScripts = false
+        }
+    }
+
+    /** The old bridge, for WebViews without the web message listener. */
+    private class JsPort(private val bridge: Bridge) {
+        @JavascriptInterface fun postMessage(message: String) {
+            bridge.receive(message)
+        }
+    }
+
+    /** Keeps an HTML page to show and tells the web app where it is. Any thread. */
+    private fun showPage(ref: String, html: String) {
+        val url = pages.prepare(html, pageScripts)
+        emit(JSONObject().put("type", "page").put("ref", ref).put("url", url).put("scripts", pageScripts))
+    }
+
+    /**
+     * A window that is never shown: it takes the address a tapped link asked for, hands it to the browser and
+     * goes away. It runs no scripts and gets no bridge.
+     */
+    private fun linkCatcher(): WebView = WebView(this).apply {
+        settings.javaScriptEnabled = false
+        webViewClient = object : WebViewClient() {
+            private var taken = false
+
+            private fun take(view: WebView, url: Uri) {
+                if (taken) return
+                taken = true
+                if (url.host != PageServer.HOST) onSession { openUrl(url.toString()) }
+                view.stopLoading()
+                view.post { view.destroy() }
+            }
+
+            override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
+                take(view, request.url)
+                return true
+            }
+
+            override fun onPageStarted(view: WebView, url: String?, favicon: Bitmap?) {
+                if (url != null && url != "about:blank") take(view, Uri.parse(url))
+            }
+        }
+    }
+
+    /** Called on the session thread, and on others for pages. */
     private fun emit(event: JSONObject) {
         val script = "window.pilcrow&&window.pilcrow.dispatch(${JSONObject.quote(event.toString())})"
         runOnUiThread { if (!destroyed) webView.evaluateJavascript(script, null) }
@@ -174,7 +266,7 @@ class MainActivity : ComponentActivity(), Session.Effects {
         val intent = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
             addCategory(Intent.CATEGORY_OPENABLE)
             type = "*/*"
-            putExtra(Intent.EXTRA_MIME_TYPES, arrayOf("text/markdown", "text/x-markdown", "text/plain", "application/octet-stream"))
+            putExtra(Intent.EXTRA_MIME_TYPES, (listOf("text/markdown", "text/x-markdown", "text/plain", "application/octet-stream") + DocKind.OTHER_TYPES).toTypedArray())
             addFlags(
                 Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION or
                     Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION,

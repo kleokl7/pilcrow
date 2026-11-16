@@ -6,7 +6,7 @@ repository also contains the following work by other people. Each keeps its own 
 | Component | Used for | Licence |
 | --- | --- | --- |
 | [CodeMirror 6](https://codemirror.net/) (`@codemirror/*`) | the text editor | MIT |
-| [Lezer](https://lezer.codemirror.net/) (`@lezer/*`) | the Markdown and YAML parsers | MIT |
+| [Lezer](https://lezer.codemirror.net/) (`@lezer/*`) | the parsers for Markdown, YAML, HTML, CSS, JavaScript and XML | MIT |
 | [Atkinson Hyperlegible Next and Mono](https://www.brailleinstitute.org/freefont/), packaged by [Fontsource](https://fontsource.org/) | the typefaces | SIL Open Font License 1.1 |
 | [AndroidX](https://developer.android.com/jetpack/androidx) (`core`, `activity`, `webkit`) | Android support libraries | Apache License 2.0 |
 | [Kotlin standard library](https://kotlinlang.org/) | the language runtime | Apache License 2.0 |

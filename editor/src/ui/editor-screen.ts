@@ -1,11 +1,15 @@
 import { openSearchPanel } from "@codemirror/search";
 import type { SaveStateName } from "../bridge";
-import { type PilcrowEditor, type ViewMode, createEditor } from "../editor/setup";
+import { type DocKind, type PilcrowEditor, type ViewMode, createEditor } from "../editor/setup";
+import { renderCsv } from "../views/csv";
+import { type PageView, createPageView } from "../views/page";
+import { renderSvg } from "../views/svg";
 import { ICON_BACK, ICON_MORE, PILCROW, clockTime, displayName, h, svg } from "./dom";
 import { createToolbar } from "./toolbar";
 
 export interface EditorScreenOptions {
   name: string;
+  kind: DocKind;
   text: string;
   mode: ViewMode;
   lineNumbers: boolean;
@@ -14,11 +18,14 @@ export interface EditorScreenOptions {
   draftOfferAt: number | null;
   onBack(): void;
   onMenu(): void;
+  /** Markdown only: the view the user chose, to remember. */
   onMode(mode: ViewMode): void;
   onChange(text: string): void;
   onRetry(): void;
   onDraftAnswer(restore: boolean): void;
   onOpenUrl(url: string): void;
+  /** HTML only: asks native to serve this page. The answer comes to showPage with the same ref. */
+  onPreparePage(ref: string, html: string): void;
 }
 
 export interface EditorScreen {
@@ -26,6 +33,10 @@ export interface EditorScreen {
   editor: PilcrowEditor;
   setSaveState(state: SaveStateName): void;
   toggleMode(): void;
+  /** What the menu calls the other view: "Show Markdown source", "Show table"… */
+  otherViewLabel(): string;
+  /** Native has the page for `ref` ready at `url`. */
+  showPage(ref: string, url: string, scripts: boolean): void;
   /** Sends a change that is still waiting. */
   flushChanges(): void;
   find(): void;
@@ -39,7 +50,10 @@ const STATE_TEXT: Record<SaveStateName, string> = {
   conflict: "Not saved",
 };
 
+const VIEW_NAME: Record<Exclude<DocKind, "markdown">, string> = { html: "page", svg: "picture", csv: "table" };
+
 export function renderEditorScreen(opts: EditorScreenOptions): EditorScreen {
+  const markdown = opts.kind === "markdown";
   const back = h("button", { type: "button", class: "pc-iconbtn", "aria-label": "Back" }, svg(ICON_BACK));
   back.addEventListener("click", opts.onBack);
 
@@ -49,7 +63,10 @@ export function renderEditorScreen(opts: EditorScreenOptions): EditorScreen {
     if (saveState === "failed") opts.onRetry();
   });
 
-  const marks = h("button", { type: "button", class: "pc-marks", "aria-label": "Show Markdown source", "aria-pressed": String(opts.mode === "source") }, svg(PILCROW));
+  // Markdown starts in the view the user chose last. Other files start in their own view: page, picture or table.
+  let viewing = !markdown;
+  const pressed = () => String(markdown ? opts.mode === "source" : !viewing);
+  const marks = h("button", { type: "button", class: "pc-marks", "aria-label": markdown ? "Show Markdown source" : "Show source", "aria-pressed": pressed() }, svg(PILCROW));
   const more = h("button", { type: "button", class: "pc-iconbtn", "aria-label": "More" }, svg(ICON_MORE));
   more.addEventListener("click", opts.onMenu);
 
@@ -80,6 +97,7 @@ export function renderEditorScreen(opts: EditorScreenOptions): EditorScreen {
     parent: host,
     doc: opts.text,
     mode: opts.mode,
+    kind: opts.kind,
     lineNumbers: opts.lineNumbers,
     readOnly: opts.readOnly,
     onChange: opts.onChange,
@@ -88,12 +106,47 @@ export function renderEditorScreen(opts: EditorScreenOptions): EditorScreen {
   // Lets tests and the WebView inspector reach the editor from the DOM.
   (editor.view.dom as unknown as { pilcrowView: unknown }).pilcrowView = editor.view;
 
-  if (!opts.readOnly) el.append(createToolbar({ editor }));
+  if (!opts.readOnly) el.append(createToolbar({ editor, formatting: markdown }));
+
+  // ---- The view of a file that is not Markdown ----
+  const view = h("div", { class: "pc-view" });
+  let page: PageView | null = null;
+  let pageRef = 0;
+  if (!markdown) host.append(view);
+
+  const renderView = () => {
+    const text = editor.getText();
+    if (opts.kind === "html") {
+      page = createPageView();
+      view.replaceChildren(page.el);
+      opts.onPreparePage(`p${++pageRef}`, text);
+    } else {
+      page = null;
+      view.replaceChildren(opts.kind === "svg" ? renderSvg(text) : renderCsv(text, opts.name));
+    }
+  };
+
+  const setViewing = (on: boolean) => {
+    viewing = on;
+    el.classList.toggle("pc-viewing", on);
+    marks.setAttribute("aria-pressed", pressed());
+    if (on) {
+      // The view shows what is in the editor, typed changes included; they are on their way to Drive first.
+      editor.flush();
+      renderView();
+    } else {
+      page = null;
+      view.replaceChildren();
+    }
+  };
+  if (viewing) setViewing(true);
 
   const toggleMode = () => {
+    if (!markdown) return setViewing(!viewing);
     const next: ViewMode = editor.getMode() === "source" ? "formatted" : "source";
     editor.setMode(next);
-    marks.setAttribute("aria-pressed", String(next === "source"));
+    opts.mode = next;
+    marks.setAttribute("aria-pressed", pressed());
     opts.onMode(next);
   };
   marks.addEventListener("click", toggleMode);
@@ -107,8 +160,19 @@ export function renderEditorScreen(opts: EditorScreenOptions): EditorScreen {
       state.classList.toggle("unsaved", next === "failed" || next === "conflict");
     },
     toggleMode,
+    otherViewLabel() {
+      if (markdown) return editor.getMode() === "source" ? "Show formatted note" : "Show Markdown source";
+      return viewing ? "Show source" : `Show ${VIEW_NAME[opts.kind as keyof typeof VIEW_NAME]}`;
+    },
+    showPage(ref, url, scripts) {
+      if (page && viewing && ref === `p${pageRef}`) page.show(url, scripts);
+    },
     flushChanges: () => editor.flush(),
-    find: () => openSearchPanel(editor.view),
+    find() {
+      // Search works on the text, so the page, picture or table gives way to the source.
+      if (viewing) setViewing(false);
+      openSearchPanel(editor.view);
+    },
     destroy: () => editor.destroy(),
   };
 }

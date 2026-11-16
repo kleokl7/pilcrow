@@ -2,7 +2,9 @@ import { Annotation, Compartment, EditorState, type Extension, Prec } from "@cod
 import { EditorView, drawSelection, keymap } from "@codemirror/view";
 import { defaultKeymap, history, historyKeymap } from "@codemirror/commands";
 import { HighlightStyle, syntaxHighlighting } from "@codemirror/language";
+import { html } from "@codemirror/lang-html";
 import { deleteMarkupBackward, markdown, markdownLanguage as gfm } from "@codemirror/lang-markdown";
+import { xml } from "@codemirror/lang-xml";
 import { yamlFrontmatter } from "@codemirror/lang-yaml";
 import { search, searchKeymap } from "@codemirror/search";
 import { tags as t } from "@lezer/highlight";
@@ -14,6 +16,9 @@ import { type MarksMode, focusTracking } from "./reveal";
 import { Wikilink } from "./wikilink";
 
 export type ViewMode = "formatted" | "source";
+
+/** What a note is. Markdown is edited formatted or as source; the others are shown by their own view, and edited as source. */
+export type DocKind = "markdown" | "html" | "svg" | "csv";
 
 export interface PilcrowEditor {
   view: EditorView;
@@ -33,6 +38,8 @@ export interface EditorOptions {
   parent: HTMLElement;
   doc: string;
   mode: ViewMode;
+  /** Markdown when left out. Any other kind is always shown as source. */
+  kind?: DocKind;
   /** Numbers in the left margin. Off when left out. */
   lineNumbers?: boolean;
   readOnly: boolean;
@@ -70,6 +77,27 @@ function sourceMode(): Extension {
   return [EditorView.editorAttributes.of({ class: "pc-source" }), syntaxHighlighting(sourceHighlight)];
 }
 
+const codeHighlight = HighlightStyle.define([
+  { tag: [t.tagName, t.angleBracket], class: "pc-tok-tag" },
+  { tag: [t.attributeName, t.propertyName], class: "pc-tok-attr" },
+  { tag: [t.attributeValue, t.string], class: "pc-tok-string" },
+  { tag: [t.comment, t.blockComment, t.lineComment], class: "pc-tok-comment" },
+  { tag: [t.keyword, t.controlKeyword, t.definitionKeyword, t.moduleKeyword, t.operatorKeyword], class: "pc-tok-keyword" },
+  { tag: [t.number, t.bool, t.null, t.atom, t.processingInstruction, t.documentMeta], class: "pc-tok-dim" },
+]);
+
+/** HTML, SVG and CSV: the text as stored, in the source view's type, coloured by its own language. */
+function codeMode(): Extension {
+  return [EditorView.editorAttributes.of({ class: "pc-source pc-code" }), syntaxHighlighting(codeHighlight)];
+}
+
+function language(kind: DocKind): Extension {
+  if (kind === "html") return html();
+  if (kind === "svg") return xml();
+  if (kind === "csv") return [];
+  return markdownLanguage();
+}
+
 function formattedMode(opts: EditorOptions): Extension {
   return [
     EditorView.editorAttributes.of({ class: MARKS_MODE === "dim" ? "pc-formatted pc-dim" : "pc-formatted" }),
@@ -82,7 +110,8 @@ function formattedMode(opts: EditorOptions): Extension {
 }
 
 export function createEditor(opts: EditorOptions): PilcrowEditor {
-  let mode = opts.mode;
+  const kind = opts.kind ?? "markdown";
+  let mode: ViewMode = kind === "markdown" ? opts.mode : "source";
   let numbered = opts.lineNumbers ?? false;
   let timer: ReturnType<typeof setTimeout> | null = null;
 
@@ -97,7 +126,9 @@ export function createEditor(opts: EditorOptions): PilcrowEditor {
     }
   };
 
-  const modeExtension = (m: ViewMode) => (m === "source" ? sourceMode() : formattedMode(opts));
+  const modeExtension = (m: ViewMode) => (kind !== "markdown" ? codeMode() : m === "source" ? sourceMode() : formattedMode(opts));
+  // Enter continues a list and Backspace removes list marks: only in Markdown.
+  const markdownKeys = kind === "markdown" ? [{ key: "Enter", run: continueList }, { key: "Backspace", run: deleteMarkupBackward }] : [];
 
   const view = new EditorView({
     parent: opts.parent,
@@ -107,11 +138,10 @@ export function createEditor(opts: EditorOptions): PilcrowEditor {
         history(),
         drawSelection(),
         EditorView.lineWrapping,
-        markdownLanguage(),
+        language(kind),
         search({ top: true }),
         keymap.of([
-          { key: "Enter", run: continueList },
-          { key: "Backspace", run: deleteMarkupBackward },
+          ...markdownKeys,
           ...defaultKeymap,
           ...historyKeymap,
           ...searchKeymap,
@@ -133,7 +163,7 @@ export function createEditor(opts: EditorOptions): PilcrowEditor {
   return {
     view,
     setMode(next) {
-      if (next === mode) return;
+      if (next === mode || kind !== "markdown") return;
       mode = next;
       view.dispatch({ effects: modeCompartment.reconfigure(modeExtension(next)) });
     },

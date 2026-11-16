@@ -105,6 +105,15 @@ class SessionTest {
         assertFalse(last("document").getBoolean("readOnly"))
     }
 
+    @Test fun `the document says what kind of file it is`() {
+        openNote()
+        assertEquals("markdown", last("document").getString("kind"))
+        val page = "content://drive/page"
+        drive.put(page, "Garden plan.html", "<p>hi</p>".toByteArray())
+        session.openUri(page, canWrite = true, fromPicker = true)
+        assertEquals("html", last("document").getString("kind"))
+    }
+
     @Test fun `open with without write permission is read-only with the notice`() {
         openNote(canWrite = false, fromPicker = false)
         val doc = last("document")
@@ -508,7 +517,7 @@ class SessionTest {
 
     @Test fun `event json uses the field names of the bridge contract`() {
         openNote()
-        assertEquals(setOf("type", "token", "name", "text", "readOnly", "notice", "draftOfferAt"), last("document").fieldNames())
+        assertEquals(setOf("type", "token", "name", "kind", "text", "readOnly", "notice", "draftOfferAt"), last("document").fieldNames())
         assertEquals(setOf("type", "viewMode", "lineNumbers"), last("settings").fieldNames())
         assertEquals(setOf("type", "state"), last("saveState").fieldNames())
         session.closeDocument()

@@ -1,6 +1,9 @@
-import type { ViewMode } from "./editor/setup";
+import type { DocKind, ViewMode } from "./editor/setup";
 
-/** Web → native. Kotlin implements this as window.PilcrowNative. All arguments are strings or booleans. */
+/**
+ * Web → native. Each call is one message, {"call": name, "args": [...]}, posted to window.PilcrowNative, which
+ * Android gives to the app's own page only (Bridge.kt). All arguments are strings or booleans.
+ */
 export interface NativeApi {
   ready(): void;
   openPicker(): void;
@@ -23,6 +26,8 @@ export interface NativeApi {
   copyText(text: string): void;
   openUrl(url: string): void;
   exitApp(): void;
+  /** An HTML page to show. Native answers with a "page" event carrying the same `ref`. */
+  preparePage(ref: string, html: string): void;
 }
 
 export interface RecentNote {
@@ -47,19 +52,21 @@ export type NativeEvent =
   /** Sent once, before anything else. */
   | { type: "settings"; viewMode: ViewMode; lineNumbers: boolean }
   | { type: "home"; recents: RecentNote[] }
-  | { type: "document"; token: string; name: string; text: string; readOnly: boolean; notice: string | null; draftOfferAt: number | null }
+  | { type: "document"; token: string; name: string; kind: DocKind; text: string; readOnly: boolean; notice: string | null; draftOfferAt: number | null }
   | { type: "saveState"; state: SaveStateName }
   | { type: "drafts"; drafts: DraftRow[] }
   | { type: "draftText"; id: string; name: string; text: string }
   | { type: "notice"; message: string }
   /** A recent note could not be opened because access to it has ended. */
   | { type: "lost"; id: string; name: string }
+  /** Where the page for `ref` is served, and whether it may run scripts. */
+  | { type: "page"; ref: string; url: string; scripts: boolean }
   | { type: "back" };
 
 const METHODS: (keyof NativeApi)[] = [
   "ready", "openPicker", "createNote", "openRecent", "findAgain", "forgetRecent", "docChanged", "closeDocument", "retrySave",
   "resolveConflict", "answerDraftOffer", "setViewMode", "setLineNumbers", "requestDrafts", "readDraft", "discardDraft", "copyText",
-  "openUrl", "exitApp",
+  "openUrl", "exitApp", "preparePage",
 ];
 
 /** A stand-in for the Android side that records every call as "method(arg, …)". */
@@ -79,6 +86,11 @@ export function installDispatcher(handler: (event: NativeEvent) => void): void {
   };
 }
 
+/** The Android side, when the page runs in the app. */
 export function nativeFromWindow(): NativeApi | null {
-  return (window as unknown as { PilcrowNative?: NativeApi }).PilcrowNative ?? null;
+  const port = (window as unknown as { PilcrowNative?: { postMessage(message: string): void } }).PilcrowNative;
+  if (!port) return null;
+  const api = {} as Record<string, (...args: unknown[]) => void>;
+  for (const call of METHODS) api[call] = (...args: unknown[]) => port.postMessage(JSON.stringify({ call, args }));
+  return api as unknown as NativeApi;
 }

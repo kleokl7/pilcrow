@@ -57,6 +57,7 @@ export function mountApp(root: HTMLElement, native: NativeApi): void {
     sheets.closeAll();
     const current = renderEditorScreen({
       name: event.name,
+      kind: event.kind,
       text: event.text,
       mode: viewMode,
       lineNumbers,
@@ -67,7 +68,7 @@ export function mountApp(root: HTMLElement, native: NativeApi): void {
       onMenu: () => {
         const sheet = sheets.open(menu([
           { label: "Find in note", run: () => current.find() },
-          { label: current.editor.getMode() === "source" ? "Show formatted note" : "Show Markdown source", run: () => current.toggleMode() },
+          { label: current.otherViewLabel(), run: () => current.toggleMode() },
           {
             label: lineNumbers ? "Hide line numbers" : "Show line numbers",
             run: () => {
@@ -88,6 +89,7 @@ export function mountApp(root: HTMLElement, native: NativeApi): void {
       onRetry: () => native.retrySave(),
       onDraftAnswer: (restore) => native.answerDraftOffer(restore),
       onOpenUrl: (url) => native.openUrl(url),
+      onPreparePage: (ref, html) => native.preparePage(ref, html),
     });
     screen = current;
     show(current.el);
@@ -140,6 +142,9 @@ export function mountApp(root: HTMLElement, native: NativeApi): void {
       }
       case "notice":
         toast(event.message);
+        break;
+      case "page":
+        screen?.showPage(event.ref, event.url, event.scripts);
         break;
       case "lost": {
         sheets.closeAll(false);

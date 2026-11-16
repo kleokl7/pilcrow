@@ -89,3 +89,10 @@
   color: var(--ink-3); pointer-events: none;
 }
 #app .pc-lines .pc-active[data-ln]::before { color: var(--ink-2); }
+
+/* ---------- Source of HTML, SVG and CSV ---------- */
+.pc-tok-tag { color: var(--mark); }
+.pc-tok-attr { color: var(--ink-2); }
+.pc-tok-string { color: color-mix(in srgb, var(--mark) 55%, var(--ink)); }
+.pc-tok-comment { color: var(--ink-3); font-style: italic; }
+.pc-tok-keyword { font-weight: 600; }
