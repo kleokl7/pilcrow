@@ -3,5 +3,7 @@
     <style name="Theme.Pilcrow" parent="@android:style/Theme.DeviceDefault.DayNight">
         <item name="android:windowActionBar">false</item>
         <item name="android:windowNoTitle">true</item>
+        <!-- The note surface, so there is no white flash before the page draws. -->
+        <item name="android:windowBackground">@color/paper</item>
     </style>
 </resources>
