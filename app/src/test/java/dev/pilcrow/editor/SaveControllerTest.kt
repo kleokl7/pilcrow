@@ -17,7 +17,8 @@ class SaveControllerTest {
     private val clock = FakeScheduler()
     private val states = ArrayList<SaveState>()
     private val drafts: DraftStore by lazy { DraftStore(tmp.newFolder("drafts")) { clock.now } }
-    private val controller: SaveController by lazy { SaveController(drive, drafts, clock) { states += it } }
+    private val pauses = ArrayList<Long>()
+    private val controller: SaveController by lazy { SaveController(drive, drafts, clock, { pauses += it }) { states += it } }
 
     private fun open(content: String = "one\n", name: String = "Weekly review.md") {
         drive.put(uri, name, content.toByteArray())
@@ -97,6 +98,80 @@ class SaveControllerTest {
         assertEquals(SaveState.SAVED, states.last())
         assertEquals("two\n", text())
         assertNull(drafts.unsavedFor(uri))
+    }
+
+    @Test fun `retry after a write that emptied the file writes the full text again`() {
+        open()
+        drive.truncateThenThrow = true
+        controller.onTextChanged("two\n")
+        controller.flush()
+        assertEquals(SaveState.FAILED, states.last())
+        assertEquals("", text())
+        drive.truncateThenThrow = false
+        controller.retry()
+        assertEquals("two\n", text())
+        assertEquals(SaveState.SAVED, states.last())
+        assertFalse("our own failed write must not look like another device", states.contains(SaveState.CONFLICT))
+    }
+
+    @Test fun `typing again after a failed write saves, it does not ask about a conflict`() {
+        open()
+        drive.truncateThenThrow = true
+        controller.onTextChanged("two\n")
+        controller.flush()
+        drive.truncateThenThrow = false
+        controller.onTextChanged("three\n")
+        clock.advance(2000)
+        assertEquals("three\n", text())
+        assertFalse(states.contains(SaveState.CONFLICT))
+    }
+
+    @Test fun `a write that shows up a moment later counts as saved`() {
+        open()
+        drive.staleReadsAfterWrite = 1
+        controller.onTextChanged("two\n")
+        controller.flush()
+        assertEquals(SaveState.SAVED, states.last())
+        assertEquals(1, pauses.size)
+        assertEquals(1, drive.writes)
+    }
+
+    @Test fun `a write that is still not visible fails, and the next try is not a conflict`() {
+        open()
+        drive.staleReadsAfterWrite = 2
+        controller.onTextChanged("two\n")
+        controller.flush()
+        assertEquals(SaveState.FAILED, states.last())
+        assertNotNull(drafts.unsavedFor(uri))
+        drive.staleReadsAfterWrite = 0
+        controller.retry()
+        assertEquals(SaveState.SAVED, states.last())
+        assertFalse(states.contains(SaveState.CONFLICT))
+    }
+
+    @Test fun `the draft remembers which version of the file it was typed on`() {
+        open()
+        controller.onTextChanged("two\n")
+        assertEquals(hashOf("one\n".toByteArray()), drafts.unsavedFor(uri)!!.first.baseHash)
+    }
+
+    @Test fun `restoring a draft typed on this version saves it`() {
+        open()
+        controller.restore("mine\n", hashOf("one\n".toByteArray()))
+        clock.advance(2000)
+        assertEquals("mine\n", text())
+        assertEquals(SaveState.SAVED, states.last())
+    }
+
+    @Test fun `restoring a draft typed on an older version asks instead of overwriting`() {
+        open("changed on the laptop\n")
+        controller.restore("mine\n", hashOf("one\n".toByteArray()))
+        clock.advance(5000)
+        assertEquals(SaveState.CONFLICT, states.last())
+        assertEquals(0, drive.writes)
+        assertEquals("changed on the laptop\n", text())
+        assertEquals("mine\n", drafts.unsavedFor(uri)!!.second)
+        assertEquals("mine\n", controller.currentText())
     }
 
     @Test fun `lost permission during a save is a failure, not a crash`() {

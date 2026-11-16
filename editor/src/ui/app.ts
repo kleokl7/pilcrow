@@ -22,6 +22,19 @@ export function mountApp(root: HTMLElement, native: NativeApi): void {
 
   const openDrafts = () => native.requestDrafts();
 
+  /** Nothing typed may still be waiting in the editor when the note is closed. */
+  const closeDocument = () => {
+    screen?.flushChanges();
+    native.closeDocument();
+  };
+
+  // The app is leaving the screen: Android may stop this page at any moment.
+  const flushIfHidden = () => {
+    if (document.visibilityState === "hidden") screen?.flushChanges();
+  };
+  document.addEventListener("visibilitychange", flushIfHidden);
+  window.addEventListener("pagehide", () => screen?.flushChanges());
+
   const showHome = () => {
     screen?.destroy();
     screen = null;
@@ -48,7 +61,7 @@ export function mountApp(root: HTMLElement, native: NativeApi): void {
       readOnly: event.readOnly,
       notice: event.notice,
       draftOfferAt: event.draftOfferAt,
-      onBack: () => native.closeDocument(),
+      onBack: closeDocument,
       onMenu: () => {
         const sheet = sheets.open(menu([
           { label: "Find in note", run: () => current.find() },
@@ -60,7 +73,8 @@ export function mountApp(root: HTMLElement, native: NativeApi): void {
         viewMode = mode;
         native.setViewMode(mode);
       },
-      onChange: (text) => native.docChanged(text),
+      // The token is fixed here, so a change that leaves late still names the note it was typed in.
+      onChange: (text) => native.docChanged(event.token, text),
       onRetry: () => native.retrySave(),
       onDraftAnswer: (restore) => native.answerDraftOffer(restore),
       onOpenUrl: (url) => native.openUrl(url),
@@ -119,7 +133,7 @@ export function mountApp(root: HTMLElement, native: NativeApi): void {
         if (top) {
           if (top.dismissable) top.close();
         } else if (screen) {
-          native.closeDocument();
+          closeDocument();
         } else {
           native.exitApp();
         }

@@ -6,7 +6,8 @@ export interface NativeApi {
   openPicker(): void;
   createNote(): void;
   openRecent(id: string): void;
-  docChanged(text: string): void;
+  /** `token` names the document the text belongs to; it comes from that document's event. */
+  docChanged(token: string, text: string): void;
   closeDocument(): void;
   retrySave(): void;
   resolveConflict(choice: "mine" | "theirs" | "copy"): void;
@@ -38,7 +39,7 @@ export type SaveStateName = "saved" | "saving" | "failed" | "conflict";
 /** Native → web. Kotlin calls window.pilcrow.dispatch(jsonString). */
 export type NativeEvent =
   | { type: "home"; recents: RecentNote[]; viewMode: ViewMode }
-  | { type: "document"; name: string; text: string; readOnly: boolean; notice: string | null; draftOfferAt: number | null }
+  | { type: "document"; token: string; name: string; text: string; readOnly: boolean; notice: string | null; draftOfferAt: number | null }
   | { type: "saveState"; state: SaveStateName }
   | { type: "drafts"; drafts: DraftRow[] }
   | { type: "draftText"; id: string; name: string; text: string }

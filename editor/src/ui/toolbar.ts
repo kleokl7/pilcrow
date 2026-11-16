@@ -44,11 +44,10 @@ export function createToolbar(opts: { editor: PilcrowEditor }): HTMLElement {
       button.className = b.cls ? `pc-tb ${b.cls}` : "pc-tb";
       button.setAttribute("aria-label", b.label);
       button.innerHTML = b.face;
-      // pointerdown, not click: cancelling it keeps the focus in the editor, so the keyboard stays open.
-      button.addEventListener("pointerdown", (event) => {
-        event.preventDefault();
-        b.run(opts.editor.view);
-      });
+      // Cancelling pointerdown keeps the focus in the editor, so the keyboard stays open.
+      button.addEventListener("pointerdown", (event) => event.preventDefault());
+      // The command runs on the tap itself: a swipe along the bar starts on a button too.
+      button.addEventListener("click", () => b.run(opts.editor.view));
     }
   };
   group(FORMAT, "pc-tb-scroll");

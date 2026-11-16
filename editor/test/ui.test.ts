@@ -19,7 +19,7 @@ const home = (recents: Extract<NativeEvent, { type: "home" }>["recents"] = [], v
   type: "home", recents, viewMode,
 });
 const doc = (over: Partial<Extract<NativeEvent, { type: "document" }>> = {}): NativeEvent => ({
-  type: "document", name: "Weekly review.md", text: "# Title\n\nbody", readOnly: false, notice: null, draftOfferAt: null, ...over,
+  type: "document", token: "t1", name: "Weekly review.md", text: "# Title\n\nbody", readOnly: false, notice: null, draftOfferAt: null, ...over,
 });
 
 afterEach(() => vi.useRealTimers());
@@ -162,7 +162,47 @@ test("typing reports docChanged with the full text", () => {
   const view = (root.querySelector(".cm-editor") as unknown as { pilcrowView: import("@codemirror/view").EditorView }).pilcrowView;
   view.dispatch({ changes: { from: 3, insert: "x" } });
   vi.advanceTimersByTime(250);
-  expect(log).toContain('docChanged("abcx")');
+  expect(log).toContain('docChanged("t1", "abcx")');
+});
+
+const viewOf = (root: HTMLElement) => (root.querySelector(".cm-editor") as unknown as { pilcrowView: import("@codemirror/view").EditorView }).pilcrowView;
+
+test("back sends what was just typed before it closes the note", () => {
+  vi.useFakeTimers();
+  const { send, root, log, button } = setup();
+  send(home());
+  send(doc({ text: "abc" }));
+  viewOf(root).dispatch({ changes: { from: 3, insert: " last words" } });
+  button("Back").click();
+  expect(log.slice(-2)).toEqual(['docChanged("t1", "abc last words")', "closeDocument()"]);
+  viewOf(root).dispatch({ changes: { from: 0, insert: "more " } });
+  send({ type: "back" });
+  expect(log.slice(-2)).toEqual(['docChanged("t1", "more abc last words")', "closeDocument()"]);
+});
+
+test("the last words of a note that is being replaced carry that note's token", () => {
+  vi.useFakeTimers();
+  const { send, root, log } = setup();
+  send(home());
+  send(doc({ token: "t1", text: "note A" }));
+  viewOf(root).dispatch({ changes: { from: 6, insert: " plus" } });
+  send(doc({ token: "t2", name: "B.md", text: "note B" }));
+  expect(log).toContain('docChanged("t1", "note A plus")');
+  viewOf(root).dispatch({ changes: { from: 6, insert: "!" } });
+  vi.advanceTimersByTime(250);
+  expect(log[log.length - 1]).toBe('docChanged("t2", "note B!")');
+});
+
+test("typed text is sent at once when the app leaves the screen", () => {
+  vi.useFakeTimers();
+  const { send, root, log } = setup();
+  send(home());
+  send(doc({ text: "abc" }));
+  viewOf(root).dispatch({ changes: { from: 3, insert: "x" } });
+  Object.defineProperty(document, "visibilityState", { value: "hidden", configurable: true });
+  document.dispatchEvent(new Event("visibilitychange"));
+  Object.defineProperty(document, "visibilityState", { value: "visible", configurable: true });
+  expect(log[log.length - 1]).toBe('docChanged("t1", "abcx")');
 });
 
 test("the menu opens drafts, and a draft can be copied or deleted", () => {

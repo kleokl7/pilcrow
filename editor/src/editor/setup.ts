@@ -2,7 +2,7 @@ import { Annotation, Compartment, EditorState, type Extension, Prec } from "@cod
 import { EditorView, drawSelection, keymap } from "@codemirror/view";
 import { defaultKeymap, history, historyKeymap } from "@codemirror/commands";
 import { HighlightStyle, syntaxHighlighting } from "@codemirror/language";
-import { markdown, markdownLanguage as gfm } from "@codemirror/lang-markdown";
+import { deleteMarkupBackward, markdown, markdownLanguage as gfm } from "@codemirror/lang-markdown";
 import { yamlFrontmatter } from "@codemirror/lang-yaml";
 import { search, searchKeymap } from "@codemirror/search";
 import { tags as t } from "@lezer/highlight";
@@ -20,6 +20,8 @@ export interface PilcrowEditor {
   getMode(): ViewMode;
   setDoc(text: string): void;
   getText(): string;
+  /** Reports a change that is still waiting, now. Call before anything that ends or replaces the note. */
+  flush(): void;
   focus(): void;
   destroy(): void;
 }
@@ -36,12 +38,13 @@ export interface EditorOptions {
 /** "hide" is the design. "dim" is the fallback if a phone keyboard misbehaves next to hidden marks (spec, Risk 2). */
 export const MARKS_MODE: MarksMode = "hide";
 
-/** How long typing must pause before the text is reported. */
+/** The longest a change waits before it is reported. Not a pause: it counts from the first unreported keystroke. */
 export const CHANGE_DEBOUNCE_MS = 250;
 
 /** GitHub-flavoured Markdown, with YAML frontmatter and [[wikilinks]]. */
 export function markdownLanguage(): Extension {
-  return yamlFrontmatter({ content: markdown({ base: gfm, extensions: [Wikilink], completeHTMLTags: false }) });
+  // addKeymap: false — the package's own Enter binding outranks ours and keeps empty list items; setup.ts binds the keys.
+  return yamlFrontmatter({ content: markdown({ base: gfm, extensions: [Wikilink], completeHTMLTags: false, addKeymap: false }) });
 }
 
 export const modeCompartment = new Compartment();
@@ -99,16 +102,21 @@ export function createEditor(opts: EditorOptions): PilcrowEditor {
         EditorView.lineWrapping,
         markdownLanguage(),
         search({ top: true }),
-        Prec.high(keymap.of([{ key: "Enter", run: continueList }])),
-        keymap.of([...defaultKeymap, ...historyKeymap, ...searchKeymap]),
+        keymap.of([
+          { key: "Enter", run: continueList },
+          { key: "Backspace", run: deleteMarkupBackward },
+          ...defaultKeymap,
+          ...historyKeymap,
+          ...searchKeymap,
+        ]),
         EditorState.readOnly.of(opts.readOnly),
         EditorView.editable.of(!opts.readOnly),
         modeCompartment.of(modeExtension(mode)),
         EditorView.updateListener.of((update) => {
           if (!update.docChanged) return;
           if (update.transactions.every((tr) => tr.annotation(external))) return;
-          if (timer !== null) clearTimeout(timer);
-          timer = setTimeout(report, CHANGE_DEBOUNCE_MS);
+          // Not restarted by later keystrokes: during steady typing the text still leaves every 250 ms.
+          if (timer === null) timer = setTimeout(report, CHANGE_DEBOUNCE_MS);
         }),
       ],
     }),
@@ -130,6 +138,7 @@ export function createEditor(opts: EditorOptions): PilcrowEditor {
       });
     },
     getText: () => view.state.doc.toString(),
+    flush,
     focus: () => view.focus(),
     destroy() {
       flush();

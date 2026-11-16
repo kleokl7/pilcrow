@@ -25,20 +25,34 @@ test("readOnly blocks edits", () => {
   ed.destroy();
 });
 
-test("onChange is debounced and flushed on destroy", () => {
+test("a change is reported at most 250 ms after it was typed, also while typing goes on", () => {
   vi.useFakeTimers();
   const calls: string[] = [];
   const ed = createEditor({ ...base, doc: "a", mode: "source", onChange: (t) => calls.push(t) });
   ed.view.dispatch({ changes: { from: 1, insert: "b" } });
   vi.advanceTimersByTime(100);
   ed.view.dispatch({ changes: { from: 2, insert: "c" } });
-  vi.advanceTimersByTime(249);
+  vi.advanceTimersByTime(149);
   expect(calls).toEqual([]);
   vi.advanceTimersByTime(1);
   expect(calls).toEqual(["abc"]);
   ed.view.dispatch({ changes: { from: 3, insert: "d" } });
   ed.destroy();
   expect(calls).toEqual(["abc", "abcd"]);
+  vi.useRealTimers();
+});
+
+test("flush reports a pending change at once and only once", () => {
+  vi.useFakeTimers();
+  const calls: string[] = [];
+  const ed = createEditor({ ...base, doc: "a", mode: "source", onChange: (t) => calls.push(t) });
+  ed.view.dispatch({ changes: { from: 1, insert: "b" } });
+  ed.flush();
+  expect(calls).toEqual(["ab"]);
+  ed.flush();
+  vi.advanceTimersByTime(1000);
+  expect(calls).toEqual(["ab"]);
+  ed.destroy();
   vi.useRealTimers();
 });
 

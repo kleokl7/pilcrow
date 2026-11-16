@@ -36,6 +36,8 @@ class SaveController(
     private val store: DocumentStore,
     private val drafts: DraftStore,
     private val scheduler: Scheduler,
+    /** Waits that many milliseconds. Real time on the phone, nothing in tests. */
+    private val pause: (Long) -> Unit = {},
     private val onState: (SaveState) -> Unit,
 ) {
     private var uri = ""
@@ -47,6 +49,12 @@ class SaveController(
     private var savedText = ""
     private var text = ""
     private var pending: Scheduler.Cancellable? = null
+
+    /** What this controller last tried to write. The file may hold it even when the save was reported as failed. */
+    private var attempted: ByteArray? = null
+
+    /** True after a write of our own failed or did not read back: the file may now hold part of it. */
+    private var ownWriteInDoubt = false
     private var state = SaveState.SAVED
 
     val isDirty: Boolean get() = text != savedText
@@ -63,19 +71,36 @@ class SaveController(
         knownMeta = meta
         savedText = (TextCodec.decode(bytes) as? DecodeResult.Ok)?.doc?.text ?: ""
         text = savedText
+        attempted = null
+        ownWriteInDoubt = false
         emit(SaveState.SAVED)
     }
 
     fun onTextChanged(newText: String) {
         text = newText
         cancelPending()
-        drafts.put(uri, name, newText)
+        drafts.put(uri, name, newText, hashOf(knownBytes))
         if (!isDirty) {
             // Back to what is on Drive (an undo, for example): there is nothing to restore later.
             drafts.markSaved(uri)
             return
         }
         pending = scheduler.schedule(AUTOSAVE_MS) { save(guard = true) }
+    }
+
+    /**
+     * Puts back text from a draft. `baseHash` is the fingerprint of the file the draft was typed on:
+     * if the file is a different version now, nothing is written and the user is asked.
+     */
+    fun restore(draftText: String, baseHash: String?) {
+        cancelPending()
+        text = draftText
+        drafts.put(uri, name, draftText, baseHash ?: hashOf(knownBytes))
+        if (baseHash != null && baseHash != hashOf(knownBytes)) {
+            emit(SaveState.CONFLICT)
+            return
+        }
+        if (isDirty) pending = scheduler.schedule(AUTOSAVE_MS) { save(guard = true) }
     }
 
     /** Save now. Used when the app goes to the background or the note is closed. */
@@ -96,7 +121,7 @@ class SaveController(
                 Resolution.Saved
             }
             ConflictChoice.THEIRS -> {
-                drafts.put(uri, name, text)
+                drafts.put(uri, name, text, hashOf(knownBytes))
                 Resolution.Reload(store.read(uri), store.meta(uri))
             }
             ConflictChoice.COPY -> Resolution.NeedsCopyTarget(copyName(name), TextCodec.encode(text, eol, bom))
@@ -114,12 +139,15 @@ class SaveController(
                 return
             }
             val out = TextCodec.encode(saving, eol, bom)
+            attempted = out
+            ownWriteInDoubt = true
             store.write(uri, out)
             // The Drive app can accept a write and still not hold it. Only what reads back counts.
-            if (!store.read(uri).contentEquals(out)) {
+            if (!readsBack(out)) {
                 emit(SaveState.FAILED)
                 return
             }
+            ownWriteInDoubt = false
             knownBytes = out
             knownMeta = store.meta(uri)
             savedText = saving
@@ -130,14 +158,25 @@ class SaveController(
         }
     }
 
+    /** The provider may need a moment before a write shows up; look twice before calling it lost. */
+    private fun readsBack(out: ByteArray): Boolean {
+        if (store.read(uri).contentEquals(out)) return true
+        pause(READ_BACK_RETRY_MS)
+        return store.read(uri).contentEquals(out)
+    }
+
     /** True when the file on Drive is no longer what this controller last read or wrote. */
     private fun changedElsewhere(): Boolean {
+        // After a write of our own went wrong the file can hold anything from nothing to all of it.
+        // That is our doing, not another device's: write again rather than ask.
+        if (ownWriteInDoubt) return false
         val now = store.meta(uri)
         val sameMeta = now.size != null && now.lastModified != null &&
             now.size == knownMeta.size && now.lastModified == knownMeta.lastModified
         if (sameMeta) return false
         // Metadata moved or is not reported: only the content can tell.
-        return !store.read(uri).contentEquals(knownBytes)
+        val current = store.read(uri)
+        return !current.contentEquals(knownBytes) && !(attempted?.let { current.contentEquals(it) } ?: false)
     }
 
     private fun cancelPending() {
@@ -152,6 +191,7 @@ class SaveController(
 
     companion object {
         const val AUTOSAVE_MS = 2000L
+        const val READ_BACK_RETRY_MS = 400L
 
         fun copyName(name: String): String {
             val dot = name.lastIndexOf('.')

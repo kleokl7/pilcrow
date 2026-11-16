@@ -25,6 +25,8 @@ export interface EditorScreen {
   editor: PilcrowEditor;
   setSaveState(state: SaveStateName): void;
   toggleMode(): void;
+  /** Sends a change that is still waiting. */
+  flushChanges(): void;
   find(): void;
   destroy(): void;
 }
@@ -103,6 +105,7 @@ export function renderEditorScreen(opts: EditorScreenOptions): EditorScreen {
       state.classList.toggle("unsaved", next === "failed" || next === "conflict");
     },
     toggleMode,
+    flushChanges: () => editor.flush(),
     find: () => openSearchPanel(editor.view),
     destroy: () => editor.destroy(),
   };

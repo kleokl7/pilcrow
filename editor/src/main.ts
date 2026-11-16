@@ -36,7 +36,8 @@ function demoNative(): NativeApi {
         { id: "5", name: "Ideas for the newsletter.md", place: "Drive", openedAt: now - 19 * 24 * HOUR, unsavedAt: null },
       ],
     });
-  const open = (text = SAMPLE_NOTE, name = "Weekly review.md") => send({ type: "document", name, text, readOnly: false, notice: null, draftOfferAt: null });
+  let opened = 0;
+  const open = (text = SAMPLE_NOTE, name = "Weekly review.md") => send({ type: "document", token: `demo${++opened}`, name, text, readOnly: false, notice: null, draftOfferAt: null });
   const drafts = () => send({ type: "drafts", drafts: [{ id: "d1", name: "Content calendar.md", updatedAt: now - 20 * HOUR, saved: false }, { id: "d2", name: "Weekly review.md", updatedAt: now - 2 * HOUR, saved: true }] });
 
   return {

@@ -31,15 +31,18 @@ class SessionTest {
         override fun launchCreate(suggestedName: String) { created = suggestedName }
         override fun openUrl(url: String) { urls += url }
         override fun copyText(text: String) { copied += text }
-        override fun finish() { finished = true }
+        override fun closeApp() { finished = true }
     }
 
     private val session: Session by lazy {
-        Session(drive, drafts, recents, clock, { clock.now + 50_000 }, { emitted += it }, fx, "formatted") { savedModes += it }
+        Session(drive, drafts, recents, clock, { clock.now + 50_000 }, { emitted += it }, fx, "formatted", {}) { savedModes += it }
     }
 
     private fun last(type: String): JSONObject = emitted.last { it.getString("type") == type }
     private fun types(): List<String> = emitted.map { it.getString("type") }
+    private fun token(): String = last("document").getString("token")
+    /** The web side reports the text of the document that is on screen. */
+    private fun type(text: String) = session.docChanged(token(), text)
     private fun JSONObject.fieldNames(): Set<String> = keys().asSequence().toSet()
 
     private fun openNote(content: String = "one\n", canWrite: Boolean = true, fromPicker: Boolean = true) {
@@ -97,7 +100,7 @@ class SessionTest {
         val doc = last("document")
         assertTrue(doc.getBoolean("readOnly"))
         assertEquals("This note opened without permission to save. Open it with Open from Drive to edit it.", doc.getString("notice"))
-        session.docChanged("typed anyway")
+        type("typed anyway")
         clock.advance(5000)
         assertEquals(0, drive.writes)
     }
@@ -112,7 +115,7 @@ class SessionTest {
 
     @Test fun `typing is saved to drive after two seconds`() {
         openNote()
-        session.docChanged("two\n")
+        type("two\n")
         clock.advance(2000)
         assertEquals("two\n", String(drive.bytes(uri)))
         assertEquals("saved", last("saveState").getString("state"))
@@ -182,14 +185,14 @@ class SessionTest {
         val doc = last("document")
         assertEquals("", doc.getString("text"))
         assertFalse(doc.getBoolean("readOnly"))
-        session.docChanged("first words")
+        type("first words")
         clock.advance(2000)
         assertEquals("first words", String(drive.bytes("content://drive/new")))
     }
 
     @Test fun `closing the document flushes the save and returns home`() {
         openNote()
-        session.docChanged("two\n")
+        type("two\n")
         session.closeDocument()
         assertEquals("two\n", String(drive.bytes(uri)))
         assertEquals("home", emitted.last().getString("type"))
@@ -198,7 +201,7 @@ class SessionTest {
 
     @Test fun `onPause flushes`() {
         openNote()
-        session.docChanged("two\n")
+        type("two\n")
         session.onPause()
         assertEquals("two\n", String(drive.bytes(uri)))
     }
@@ -206,7 +209,7 @@ class SessionTest {
     @Test fun `a conflict reaches the web and keep mine resolves it`() {
         openNote()
         drive.externalChange(uri, "from the laptop\n".toByteArray(), 9_000)
-        session.docChanged("two\n")
+        type("two\n")
         clock.advance(2000)
         assertEquals("conflict", last("saveState").getString("state"))
         session.resolveConflict("mine")
@@ -217,7 +220,7 @@ class SessionTest {
     @Test fun `load theirs shows the other version and offers my text back`() {
         openNote()
         drive.externalChange(uri, "from the laptop\n".toByteArray(), 9_000)
-        session.docChanged("two\n")
+        type("two\n")
         clock.advance(2000)
         emitted.clear()
         session.resolveConflict("theirs")
@@ -230,7 +233,7 @@ class SessionTest {
     @Test fun `copy choice writes my text to the new file and opens it`() {
         openNote()
         drive.externalChange(uri, "from the laptop\n".toByteArray(), 9_000)
-        session.docChanged("two\n")
+        type("two\n")
         clock.advance(2000)
         session.resolveConflict("copy")
         assertEquals("Weekly review (phone).md", fx.created)
@@ -246,7 +249,7 @@ class SessionTest {
     @Test fun `a copy that cannot be written keeps the text as a draft`() {
         openNote()
         drive.externalChange(uri, "from the laptop\n".toByteArray(), 9_000)
-        session.docChanged("two\n")
+        type("two\n")
         clock.advance(2000)
         session.resolveConflict("copy")
         drive.put("content://drive/copy", "Weekly review (phone).md", ByteArray(0))
@@ -254,6 +257,130 @@ class SessionTest {
         session.onCreated("content://drive/copy")
         assertEquals("Could not save the copy. Your text is kept under Recent drafts.", last("notice").getString("message"))
         assertEquals("two\n", drafts.unsavedFor(uri)!!.second)
+    }
+
+    @Test fun `text that arrives after the note was closed is kept as a draft`() {
+        openNote()
+        val closed = token()
+        type("two\n")
+        session.closeDocument()
+        session.docChanged(closed, "two and the last words\n")
+        assertEquals("two\n", String(drive.bytes(uri)))
+        assertEquals("two and the last words\n", drafts.unsavedFor(uri)!!.second)
+        emitted.clear()
+        session.openUri(uri, canWrite = true, fromPicker = false)
+        assertFalse(last("document").isNull("draftOfferAt"))
+    }
+
+    @Test fun `text that arrives late and is already saved leaves no draft behind`() {
+        openNote()
+        val closed = token()
+        type("two\n")
+        session.closeDocument()
+        session.docChanged(closed, "two\n")
+        assertNull(drafts.unsavedFor(uri))
+    }
+
+    @Test fun `a late change from the previous note never reaches the current note`() {
+        val other = "content://drive/2"
+        drive.put(other, "B.md", "note B\n".toByteArray())
+        openNote("note A\n")
+        val a = token()
+        session.openUri(other, canWrite = true, fromPicker = false)
+        session.docChanged(a, "note A plus the last words\n")
+        clock.advance(5000)
+        assertEquals("note B\n", String(drive.bytes(other)))
+        assertEquals("note A plus the last words\n", drafts.unsavedFor(uri)!!.second)
+        assertNull(drafts.unsavedFor(other))
+    }
+
+    @Test fun `every document event has a new token`() {
+        openNote()
+        val first = token()
+        session.closeDocument()
+        session.openUri(uri, canWrite = true, fromPicker = false)
+        assertFalse(first == token())
+    }
+
+    @Test fun `typing before answering the offer does not destroy the offered draft`() {
+        drafts.put(uri, "Weekly review.md", "yesterday's unsaved words\n")
+        openNote()
+        type("one, with a typo fixed\n")
+        clock.advance(2000)
+        assertEquals("one, with a typo fixed\n", String(drive.bytes(uri)))
+        assertEquals("yesterday's unsaved words\n", drafts.unsavedFor(uri)!!.second)
+        session.closeDocument()
+        assertFalse(last("home").getJSONArray("recents").getJSONObject(0).isNull("unsavedAt"))
+        emitted.clear()
+        session.openUri(uri, canWrite = true, fromPicker = false)
+        assertFalse("the offer comes back until it is answered", last("document").isNull("draftOfferAt"))
+        session.answerDraftOffer(true)
+        assertEquals("yesterday's unsaved words\n", last("document").getString("text"))
+    }
+
+    @Test fun `my text survives typing after load theirs`() {
+        openNote()
+        drive.externalChange(uri, "from the laptop\n".toByteArray(), 9_000)
+        type("my words\n")
+        clock.advance(2000)
+        session.resolveConflict("theirs")
+        type("from the laptop!\n")
+        clock.advance(2000)
+        assertEquals("from the laptop!\n", String(drive.bytes(uri)))
+        assertEquals("my words\n", drafts.unsavedFor(uri)!!.second)
+    }
+
+    @Test fun `restoring a draft over a file changed elsewhere raises the conflict question`() {
+        openNote()
+        type("typed offline\n")
+        drive.failWrites = true
+        clock.advance(2000)
+        session.closeDocument()
+        drive.failWrites = false
+        drive.externalChange(uri, "edited on the laptop\n".toByteArray(), 9_000)
+        emitted.clear()
+        session.openUri(uri, canWrite = true, fromPicker = false)
+        assertEquals("edited on the laptop\n", last("document").getString("text"))
+        session.answerDraftOffer(true)
+        clock.advance(5000)
+        assertEquals("typed offline\n", last("document").getString("text"))
+        assertEquals("conflict", last("saveState").getString("state"))
+        assertEquals("edited on the laptop\n", String(drive.bytes(uri)))
+    }
+
+    @Test fun `a change that arrives while the app is in the background is saved at once`() {
+        openNote()
+        session.onPause()
+        type("typed just before leaving\n")
+        assertEquals("typed just before leaving\n", String(drive.bytes(uri)))
+        session.onResume()
+        type("back again\n")
+        assertEquals("typed just before leaving\n", String(drive.bytes(uri)))
+        clock.advance(2000)
+        assertEquals("back again\n", String(drive.bytes(uri)))
+    }
+
+    @Test fun `a provider that throws something unexpected does not crash the open`() {
+        drive.put(uri, "Weekly review.md", "one\n".toByteArray())
+        session.onWebReady()
+        drive.crash = true
+        session.openUri(uri, canWrite = true, fromPicker = true)
+        assertEquals("Could not open this note.", last("notice").getString("message"))
+        assertEquals("home", last("home").getString("type"))
+    }
+
+    @Test fun `a copy that does not read back is not trusted`() {
+        openNote()
+        drive.externalChange(uri, "from the laptop\n".toByteArray(), 9_000)
+        type("two\n")
+        clock.advance(2000)
+        session.resolveConflict("copy")
+        drive.put("content://drive/copy", "Weekly review (phone).md", ByteArray(0))
+        drive.corruptWrites = true
+        session.onCreated("content://drive/copy")
+        assertEquals("Could not save the copy. Your text is kept under Recent drafts.", last("notice").getString("message"))
+        assertEquals("two\n", drafts.unsavedFor(uri)!!.second)
+        assertEquals("Weekly review.md", last("document").getString("name"))
     }
 
     @Test fun `only http and https urls are opened`() {
@@ -301,7 +428,7 @@ class SessionTest {
 
     @Test fun `event json uses the field names of the bridge contract`() {
         openNote()
-        assertEquals(setOf("type", "name", "text", "readOnly", "notice", "draftOfferAt"), last("document").fieldNames())
+        assertEquals(setOf("type", "token", "name", "text", "readOnly", "notice", "draftOfferAt"), last("document").fieldNames())
         assertEquals(setOf("type", "recents", "viewMode"), last("home").fieldNames())
         assertEquals(setOf("id", "name", "place", "openedAt", "unsavedAt"), recents.list().let { session.closeDocument(); last("home").getJSONArray("recents").getJSONObject(0).fieldNames() })
         assertEquals(setOf("type", "state"), last("saveState").fieldNames())

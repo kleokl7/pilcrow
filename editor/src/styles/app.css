@@ -51,7 +51,9 @@ button:focus-visible { outline: 2px solid var(--mark); outline-offset: 2px; }
 
 /* ---------- The formatting bar above the keyboard ---------- */
 .pc-toolbar { height: 46px; flex: none; display: flex; align-items: center; border-top: 1px solid var(--rule); background: var(--paper); color: var(--ink-2); }
-.pc-tb-scroll { flex: 1; min-width: 0; display: flex; overflow-x: auto; scrollbar-width: none; padding-left: 6px; }
+.pc-tb-scroll { flex: 1; min-width: 0; display: flex; overflow-x: auto; scrollbar-width: none; padding-left: 4px; }
+/* 8 x 36 px + 4 px fits beside Undo and Redo on a 384 px wide phone, so nothing is cut off. */
+.pc-tb-scroll .pc-tb { width: 36px; }
 .pc-tb-scroll::-webkit-scrollbar { display: none; }
 .pc-tb-fixed { flex: none; display: flex; padding: 0 6px 0 4px; border-left: 1px solid var(--rule); }
 .pc-tb { width: 40px; height: 44px; flex: none; padding: 0; border: 0; border-radius: 8px; background: none; color: inherit; font-size: 17px; font-weight: 600; display: grid; place-items: center; }

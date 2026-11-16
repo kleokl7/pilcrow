@@ -96,6 +96,7 @@ class SafDocumentStore(private val context: Context) : DocumentStore {
     }
 
     private companion object {
-        val WRITE_MODES = listOf("wt", "w", "rwt")
+        // "w" last: some providers take it without emptying the file first, which leaves the old tail behind.
+        val WRITE_MODES = listOf("wt", "rwt", "w")
     }
 }

@@ -6,6 +6,8 @@ import android.content.ClipboardManager
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
+import android.os.Handler
+import android.os.HandlerThread
 import android.provider.DocumentsContract
 import android.view.ViewGroup
 import android.webkit.WebResourceRequest
@@ -22,24 +24,36 @@ import androidx.core.view.WindowInsetsCompat
 import androidx.webkit.WebViewAssetLoader
 import org.json.JSONObject
 import java.io.File
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
 
 /**
  * The only screen. It hosts the web app, hands it files from the system picker and from "Open with",
  * and keeps it above the keyboard. Everything else is decided by [Session].
+ *
+ * Threads: the session, and with it every read and write of a Drive file, runs on its own thread, so a
+ * slow provider cannot freeze the screen. Whatever the session asks of Android comes back to the main thread.
  */
 class MainActivity : ComponentActivity(), Session.Effects {
 
     private lateinit var webView: WebView
     private lateinit var session: Session
+    private val sessionThread = HandlerThread("pilcrow-session").apply { start() }
+    private val sessionHandler = Handler(sessionThread.looper)
+    @Volatile private var destroyed = false
+
+    private fun onSession(block: Session.() -> Unit) {
+        sessionHandler.post { session.block() }
+    }
 
     private val pickDocument = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
         val uri = result.data?.data
-        if (result.resultCode == RESULT_OK && uri != null) session.openUri(uri.toString(), canWrite = true, fromPicker = true)
+        if (result.resultCode == RESULT_OK && uri != null) onSession { openUri(uri.toString(), canWrite = true, fromPicker = true) }
     }
 
     private val createDocument = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
         val uri = result.data?.data
-        if (result.resultCode == RESULT_OK && uri != null) session.onCreated(uri.toString()) else session.onCreateCancelled()
+        if (result.resultCode == RESULT_OK && uri != null) onSession { onCreated(uri.toString()) } else onSession { onCreateCancelled() }
     }
 
     @SuppressLint("SetJavaScriptEnabled")
@@ -53,11 +67,12 @@ class MainActivity : ComponentActivity(), Session.Effects {
             store = SafDocumentStore(applicationContext),
             drafts = DraftStore(File(filesDir, "drafts")) { System.currentTimeMillis() },
             recents = RecentsStore(File(filesDir, "recents.json")),
-            scheduler = MainThreadScheduler(),
+            scheduler = HandlerScheduler(sessionHandler),
             now = { System.currentTimeMillis() },
             emit = ::emit,
             effects = this,
             viewMode = prefs.getString(PREF_VIEW_MODE, "formatted") ?: "formatted",
+            pause = { ms -> Thread.sleep(ms) },
         ) { mode -> prefs.edit().putString(PREF_VIEW_MODE, mode).apply() }
 
         val assets = WebViewAssetLoader.Builder()
@@ -72,7 +87,7 @@ class MainActivity : ComponentActivity(), Session.Effects {
             settings.allowFileAccess = false
             settings.allowContentAccess = false
             settings.textZoom = 100
-            addJavascriptInterface(Bridge { session }, "PilcrowNative")
+            addJavascriptInterface(Bridge(::onSession), "PilcrowNative")
             webViewClient = object : WebViewClient() {
                 override fun shouldInterceptRequest(view: WebView, request: WebResourceRequest): WebResourceResponse? =
                     assets.shouldInterceptRequest(request.url)
@@ -97,7 +112,7 @@ class MainActivity : ComponentActivity(), Session.Effects {
         }
 
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
-            override fun handleOnBackPressed() = session.onBackPressed()
+            override fun handleOnBackPressed() = onSession { onBackPressed() }
         })
 
         handleIntent(intent)
@@ -110,12 +125,25 @@ class MainActivity : ComponentActivity(), Session.Effects {
         handleIntent(intent)
     }
 
+    override fun onResume() {
+        super.onResume()
+        onSession { onResume() }
+    }
+
     override fun onPause() {
-        session.onPause()
+        // The text must be on its way to Drive before Android may stop the app. Wait for it, but not for long.
+        val flushed = CountDownLatch(1)
+        sessionHandler.post {
+            session.onPause()
+            flushed.countDown()
+        }
+        flushed.await(PAUSE_WAIT_MS, TimeUnit.MILLISECONDS)
         super.onPause()
     }
 
     override fun onDestroy() {
+        destroyed = true
+        sessionThread.quitSafely()
         webView.destroy()
         super.onDestroy()
     }
@@ -125,16 +153,18 @@ class MainActivity : ComponentActivity(), Session.Effects {
         val uri = intent?.data ?: return
         if (intent.action != Intent.ACTION_VIEW && intent.action != Intent.ACTION_EDIT) return
         val canWrite = intent.flags and Intent.FLAG_GRANT_WRITE_URI_PERMISSION != 0
-        session.openUri(uri.toString(), canWrite, fromPicker = false)
+        onSession { openUri(uri.toString(), canWrite, fromPicker = false) }
     }
 
+    /** Called on the session thread. */
     private fun emit(event: JSONObject) {
-        webView.evaluateJavascript("window.pilcrow&&window.pilcrow.dispatch(${JSONObject.quote(event.toString())})", null)
+        val script = "window.pilcrow&&window.pilcrow.dispatch(${JSONObject.quote(event.toString())})"
+        runOnUiThread { if (!destroyed) webView.evaluateJavascript(script, null) }
     }
 
-    // ---- Session.Effects ----
+    // ---- Session.Effects: called on the session thread, done on the main thread ----
 
-    override fun launchPicker(initialUri: String?) {
+    override fun launchPicker(initialUri: String?) = runOnUiThread {
         val intent = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
             addCategory(Intent.CATEGORY_OPENABLE)
             type = "*/*"
@@ -145,19 +175,19 @@ class MainActivity : ComponentActivity(), Session.Effects {
             )
             if (initialUri != null) putExtra(DocumentsContract.EXTRA_INITIAL_URI, Uri.parse(initialUri))
         }
-        pickDocument.launch(intent)
+        if (!destroyed) pickDocument.launch(intent)
     }
 
-    override fun launchCreate(suggestedName: String) {
+    override fun launchCreate(suggestedName: String) = runOnUiThread {
         val intent = Intent(Intent.ACTION_CREATE_DOCUMENT).apply {
             addCategory(Intent.CATEGORY_OPENABLE)
             type = "text/markdown"
             putExtra(Intent.EXTRA_TITLE, suggestedName)
         }
-        createDocument.launch(intent)
+        if (!destroyed) createDocument.launch(intent)
     }
 
-    override fun openUrl(url: String) {
+    override fun openUrl(url: String) = runOnUiThread {
         try {
             startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
         } catch (e: Exception) {
@@ -165,12 +195,16 @@ class MainActivity : ComponentActivity(), Session.Effects {
         }
     }
 
-    override fun copyText(text: String) {
+    override fun copyText(text: String) = runOnUiThread {
         getSystemService(ClipboardManager::class.java).setPrimaryClip(ClipData.newPlainText("Pilcrow draft", text))
     }
+
+    // Not named finish(): Activity.finish() must run on the main thread, and this is called on the session's.
+    override fun closeApp() = runOnUiThread { finish() }
 
     private companion object {
         const val START_URL = "https://appassets.androidplatform.net/editor/index.html"
         const val PREF_VIEW_MODE = "viewMode"
+        const val PAUSE_WAIT_MS = 1500L
     }
 }

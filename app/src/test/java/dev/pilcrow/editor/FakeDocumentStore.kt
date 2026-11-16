@@ -4,13 +4,19 @@ import java.io.IOException
 
 /** An in-memory stand-in for Drive, with switches for the ways a real provider misbehaves. */
 class FakeDocumentStore : DocumentStore {
-    private class Entry(var bytes: ByteArray, var name: String, var lastModified: Long?, var reportSize: Boolean = true)
+    private class Entry(var bytes: ByteArray, var name: String, var lastModified: Long?) {
+        var stale: ByteArray? = null
+        var staleLeft = 0
+    }
 
     private val files = HashMap<String, Entry>()
     var reads = 0
     var writes = 0
     var failWrites = false          // write throws IOException
     var corruptWrites = false       // write "succeeds" but stores something else
+    var truncateThenThrow = false   // write empties the file, then throws: the worst a provider can do
+    var staleReadsAfterWrite = 0    // that many reads after a write still return the old content
+    var crash = false               // meta and read throw something that is neither IOException nor SecurityException
     var revoked = false             // every call throws NeedsPicker
     var hideMeta = false            // size and lastModified come back null
     var persistable = true
@@ -35,6 +41,7 @@ class FakeDocumentStore : DocumentStore {
 
     private fun entry(uri: String): Entry {
         if (revoked) throw NeedsPicker()
+        if (crash) throw IllegalStateException("provider fell over")
         return files[uri] ?: throw IOException("No such file: $uri")
     }
 
@@ -44,12 +51,23 @@ class FakeDocumentStore : DocumentStore {
 
     override fun read(uri: String): ByteArray {
         reads++
-        return entry(uri).bytes.copyOf()
+        val e = entry(uri)
+        if (e.staleLeft > 0) {
+            e.staleLeft--
+            return e.stale!!.copyOf()
+        }
+        return e.bytes.copyOf()
     }
 
     override fun write(uri: String, bytes: ByteArray) {
         val e = entry(uri)
         if (failWrites) throw IOException("Drive refused the write")
+        if (truncateThenThrow) {
+            e.bytes = ByteArray(0)
+            throw IOException("Drive failed in the middle of the write")
+        }
+        e.stale = e.bytes
+        e.staleLeft = staleReadsAfterWrite
         writes++
         clock += 1_000
         e.bytes = if (corruptWrites) "something else".toByteArray() else bytes.copyOf()

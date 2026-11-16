@@ -2,11 +2,10 @@ package dev.pilcrow.editor
 
 import org.json.JSONArray
 import org.json.JSONObject
-import java.io.IOException
 
 /**
  * Everything the app does, without Android: which note is open, what the web side is told,
- * what happens on open, close, conflict and back. No Android imports. All calls on the main thread.
+ * what happens on open, close, conflict and back. No Android imports. All calls on one thread.
  *
  * The JSON it emits and the calls it receives are the bridge contract in editor/src/bridge.ts.
  */
@@ -19,6 +18,8 @@ class Session(
     private val emit: (JSONObject) -> Unit,
     private val effects: Effects,
     private var viewMode: String,
+    /** Waits that many milliseconds; passed on to the save logic. Real time on the phone, nothing in tests. */
+    private val pause: (Long) -> Unit = {},
     private val onViewMode: (String) -> Unit,
 ) {
     /** The things only Android can do. */
@@ -27,17 +28,28 @@ class Session(
         fun launchCreate(suggestedName: String)
         fun openUrl(url: String)
         fun copyText(text: String)
-        fun finish()
+        fun closeApp()
     }
 
     private class Pending(val uri: String, val canWrite: Boolean, val fromPicker: Boolean)
 
+    /** A document the web side has shown. `text` is the last text of it that reached the save logic. */
+    private class Shown(val uri: String, val name: String, var text: String)
+
     private var webReady = false
+    private var paused = false
     private var pending: Pending? = null
     private var openUriString: String? = null
+    private var openName = ""
     private var controller: SaveController? = null
-    private var offeredDraft: String? = null
+    private var offeredDraftId: String? = null
     private var copyBytes: ByteArray? = null
+
+    private var tokenCounter = 0
+    private var currentToken: String? = null
+
+    /** Documents that are no longer on screen. Their editor can still deliver a last change. */
+    private val retired = LinkedHashMap<String, Shown>()
 
     fun onWebReady() {
         webReady = true
@@ -75,15 +87,19 @@ class Session(
         val copy = copyBytes
         copyBytes = null
         if (copy != null) {
-            try {
+            val written = try {
                 store.write(uri, copy)
+                store.read(uri).contentEquals(copy)
             } catch (e: Exception) {
+                false
+            }
+            if (!written) {
                 notice("Could not save the copy. Your text is kept under Recent drafts.")
                 return
             }
             // The text now lives in the copy; the old note keeps the other device's version.
             openUriString?.let { drafts.markSaved(it) }
-            controller = null
+            retire()
         } else {
             controller?.flush()
         }
@@ -94,15 +110,24 @@ class Session(
         copyBytes = null
     }
 
-    fun docChanged(text: String) {
-        controller?.onTextChanged(text)
+    /** `token` names the document the text was typed in. Text for a document that is gone never reaches the one on screen. */
+    fun docChanged(token: String, text: String) {
+        if (token == currentToken) {
+            val current = controller ?: return
+            current.onTextChanged(text)
+            // In the background there may be no "two seconds later".
+            if (paused) current.flush()
+            return
+        }
+        val old = retired[token] ?: return
+        if (old.text == text) return
+        old.text = text
+        drafts.putKept(old.uri, old.name, text, baseHash = null)
     }
 
     fun closeDocument() {
         controller?.flush()
-        controller = null
-        openUriString = null
-        offeredDraft = null
+        retire()
         emitHome()
     }
 
@@ -118,7 +143,7 @@ class Session(
                 "mine" -> current.resolve(ConflictChoice.MINE)
                 "theirs" -> {
                     current.resolve(ConflictChoice.THEIRS)
-                    controller = null
+                    retire()
                     // Opens the other device's version; the user's own text comes back as a draft offer.
                     load(uri, canWrite = true, fromPicker = false, pickerFallback = false)
                 }
@@ -134,16 +159,22 @@ class Session(
     }
 
     fun answerDraftOffer(restore: Boolean) {
+        val id = offeredDraftId ?: return
+        offeredDraftId = null
         val uri = openUriString ?: return
-        val text = offeredDraft
-        offeredDraft = null
-        if (text == null) return
+        val current = controller ?: return
         if (!restore) {
-            drafts.discard(idOf(uri))
+            drafts.discard(id)
             return
         }
-        emit(documentEvent(lastName, text, readOnly = false, notice = null, draftOfferAt = null))
-        controller?.onTextChanged(text)
+        val info = drafts.find(id) ?: return
+        val text = drafts.read(id) ?: return
+        // A new document for the web side: the editor that showed the file is replaced, and its last
+        // change, if one is still on its way, must not land on the restored text.
+        retired[currentToken ?: ""] = Shown(uri, openName, current.currentText())
+        emit(documentEvent(newToken(), openName, text, readOnly = false, notice = null, draftOfferAt = null))
+        current.restore(text, info.baseHash)
+        drafts.discard(id)
     }
 
     fun setViewMode(mode: String) {
@@ -161,12 +192,15 @@ class Session(
     }
 
     fun readDraft(id: String) {
-        val info = drafts.list().firstOrNull { it.id == id } ?: return
+        val info = drafts.find(id) ?: return
         val text = drafts.read(id) ?: return
         emit(JSONObject().put("type", "draftText").put("id", id).put("name", info.name).put("text", text))
     }
 
-    fun discardDraft(id: String) = drafts.discard(id)
+    fun discardDraft(id: String) {
+        if (id == offeredDraftId) offeredDraftId = null
+        drafts.discard(id)
+    }
 
     fun copyText(text: String) = effects.copyText(text)
 
@@ -174,18 +208,38 @@ class Session(
         if (url.startsWith("https://") || url.startsWith("http://")) effects.openUrl(url)
     }
 
-    fun exitApp() = effects.finish()
+    fun exitApp() = effects.closeApp()
 
     /** The app is leaving the screen: get the text onto Drive now. */
     fun onPause() {
+        paused = true
         controller?.flush()
+    }
+
+    fun onResume() {
+        paused = false
     }
 
     fun onBackPressed() = emit(JSONObject().put("type", "back"))
 
     // ---------------------------------------------------------------------------------------------
 
-    private var lastName = ""
+    private fun newToken(): String = "t${++tokenCounter}".also { currentToken = it }
+
+    /** Takes the open document off the stage, remembering it for a change that is still on its way. */
+    private fun retire() {
+        val token = currentToken
+        val uri = openUriString
+        val current = controller
+        if (token != null && uri != null && current != null) {
+            retired[token] = Shown(uri, openName, current.currentText())
+            while (retired.size > MAX_RETIRED) retired.remove(retired.keys.first())
+        }
+        controller = null
+        currentToken = null
+        openUriString = null
+        offeredDraftId = null
+    }
 
     private fun load(uri: String, canWrite: Boolean, fromPicker: Boolean, pickerFallback: Boolean) {
         val meta: DocMeta
@@ -197,31 +251,32 @@ class Session(
             failOpen("Drive did not keep access to this note. Pick it again.")
             if (pickerFallback) effects.launchPicker(uri)
             return
-        } catch (e: IOException) {
+        } catch (e: Exception) {
+            // Providers are other apps' code: anything can come out of them, and none of it may end this app.
             failOpen("Could not open this note.")
             return
         }
 
+        retire()
         val persisted = if (fromPicker) store.persist(uri, canWrite) else recents.find(idOf(uri))?.persisted ?: false
         recents.touch(uri, meta.name, store.providerLabel(uri), persisted, now())
         openUriString = uri
-        lastName = meta.name
-        offeredDraft = null
-        controller = null
+        openName = meta.name
 
         when (val decoded = TextCodec.decode(bytes)) {
-            is DecodeResult.ReadOnly -> emit(documentEvent(meta.name, decoded.text, readOnly = true, notice = decoded.reason, draftOfferAt = null))
+            is DecodeResult.ReadOnly ->
+                emit(documentEvent(newToken(), meta.name, decoded.text, readOnly = true, notice = decoded.reason, draftOfferAt = null))
             is DecodeResult.Ok -> {
                 val doc = decoded.doc
                 if (!canWrite) {
-                    emit(documentEvent(meta.name, doc.text, readOnly = true, notice = NO_WRITE, draftOfferAt = null))
+                    emit(documentEvent(newToken(), meta.name, doc.text, readOnly = true, notice = NO_WRITE, draftOfferAt = null))
                     return
                 }
-                val draft = drafts.unsavedFor(uri)?.takeIf { it.second != doc.text }
-                offeredDraft = draft?.second
+                val offer = draftToOffer(uri, doc.text)
+                offeredDraftId = offer?.id
                 // The document first, so that the web side has a screen for the save state that follows.
-                emit(documentEvent(meta.name, doc.text, readOnly = false, notice = null, draftOfferAt = draft?.first?.updatedAt))
-                controller = SaveController(store, drafts, scheduler) { state ->
+                emit(documentEvent(newToken(), meta.name, doc.text, readOnly = false, notice = null, draftOfferAt = offer?.updatedAt))
+                controller = SaveController(store, drafts, scheduler, pause) { state ->
                     emit(JSONObject().put("type", "saveState").put("state", state.name.lowercase()))
                 }.also { it.open(uri, meta.name, bytes, meta, doc.eol, doc.bom) }
                 if (doc.mixedEol) notice("This note mixed two kinds of line endings. It will be saved with one.")
@@ -229,9 +284,21 @@ class Session(
         }
     }
 
+    /**
+     * The newest unsaved draft of this file, if it says something the file does not. It is set aside
+     * first, so that typing in the note cannot overwrite it before the user has answered.
+     */
+    private fun draftToOffer(uri: String, fileText: String): DraftInfo? {
+        val (info, text) = drafts.unsavedFor(uri) ?: return null
+        if (text == fileText) {
+            if (info.kept) drafts.discard(info.id) else drafts.markSaved(uri)
+            return null
+        }
+        return if (info.kept) info else drafts.keep(uri) ?: info
+    }
+
     private fun failOpen(message: String) {
-        controller = null
-        openUriString = null
+        retire()
         emitHome()
         notice(message)
     }
@@ -248,8 +315,8 @@ class Session(
         emit(JSONObject().put("type", "home").put("recents", rows).put("viewMode", viewMode))
     }
 
-    private fun documentEvent(name: String, text: String, readOnly: Boolean, notice: String?, draftOfferAt: Long?): JSONObject =
-        JSONObject().put("type", "document").put("name", name).put("text", text).put("readOnly", readOnly)
+    private fun documentEvent(token: String, name: String, text: String, readOnly: Boolean, notice: String?, draftOfferAt: Long?): JSONObject =
+        JSONObject().put("type", "document").put("token", token).put("name", name).put("text", text).put("readOnly", readOnly)
             .put("notice", notice ?: JSONObject.NULL).put("draftOfferAt", draftOfferAt ?: JSONObject.NULL)
 
     private fun notice(message: String) {
@@ -258,5 +325,6 @@ class Session(
 
     private companion object {
         const val NO_WRITE = "This note opened without permission to save. Open it with Open from Drive to edit it."
+        const val MAX_RETIRED = 8
     }
 }

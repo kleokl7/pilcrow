@@ -83,6 +83,46 @@ class DraftStoreTest {
         assertNotNull(broken.unsavedFor("content://a/1"))
     }
 
+    @Test fun `a kept draft is not overwritten by typing`() {
+        store.put("content://a/1", "A.md", "yesterday's words", baseHash = "abc")
+        val kept = store.keep("content://a/1")!!
+        now += 10
+        store.put("content://a/1", "A.md", "a typo fix")
+        store.markSaved("content://a/1")
+        assertEquals("yesterday's words", store.read(kept.id))
+        assertEquals(2, store.list().size)
+        val (info, text) = store.unsavedFor("content://a/1")!!
+        assertEquals("yesterday's words", text)
+        assertEquals(kept.id, info.id)
+        assertTrue(info.kept)
+        assertEquals("abc", info.baseHash)
+    }
+
+    @Test fun `keep returns null when there is nothing unsaved`() {
+        assertNull(store.keep("content://a/1"))
+        store.put("content://a/1", "A.md", "x")
+        store.markSaved("content://a/1")
+        assertNull(store.keep("content://a/1"))
+    }
+
+    @Test fun `unsavedFor returns the newest unsaved draft, kept or not`() {
+        store.put("content://a/1", "A.md", "older")
+        store.keep("content://a/1")
+        now += 10
+        store.put("content://a/1", "A.md", "newer")
+        assertEquals("newer", store.unsavedFor("content://a/1")!!.second)
+        store.putKept("content://a/1", "A.md", "newest", null)
+        now += 10
+        assertEquals(3, store.list().size)
+    }
+
+    @Test fun `kept drafts are never pruned while unsaved`() {
+        store.putKept("content://a/1", "A.md", "words", null)
+        now += 30 * day
+        store.prune()
+        assertEquals(1, store.list().size)
+    }
+
     @Test fun `read without permission maps to NeedsPicker`() {
         val drive = FakeDocumentStore().apply { put("content://a/1", "A.md", "x".toByteArray()); revoked = true }
         assertThrows(NeedsPicker::class.java) { drive.read("content://a/1") }
