@@ -78,7 +78,8 @@ class MainActivity : ComponentActivity(), Session.Effects {
         ) { mode -> prefs.edit().putString(PREF_VIEW_MODE, mode).apply() }
 
         val assets = WebViewAssetLoader.Builder()
-            .addPathHandler("/editor/", WebViewAssetLoader.AssetsPathHandler(this))
+            // The handler serves the APK's assets folder: /assets/editor/index.html is assets/editor/index.html.
+            .addPathHandler("/assets/", WebViewAssetLoader.AssetsPathHandler(this))
             .build()
 
         webView = WebView(this).apply {
@@ -205,7 +206,7 @@ class MainActivity : ComponentActivity(), Session.Effects {
     override fun closeApp() = runOnUiThread { finish() }
 
     private companion object {
-        const val START_URL = "https://appassets.androidplatform.net/editor/index.html"
+        const val START_URL = "https://appassets.androidplatform.net/assets/editor/index.html"
         const val PREF_VIEW_MODE = "viewMode"
         const val PAUSE_WAIT_MS = 1500L
     }
