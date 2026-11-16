@@ -16,3 +16,7 @@ keystore.properties
 .superpowers/
 app/src/main/assets/editor/
 .kotlin/
+
+# private working documents and the throwaway Drive test app stay on this machine
+docs/superpowers/
+spike/

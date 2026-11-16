@@ -1,5 +1,14 @@
+import java.util.Properties
+
 plugins {
     id("com.android.application")
+}
+
+// Release signing is read from keystore.properties, which is never in git. Without that file the
+// release build is still produced, unsigned, so the project builds for anyone who clones it.
+val keystoreProps = Properties().apply {
+    val file = rootProject.file("keystore.properties")
+    if (file.isFile) file.inputStream().use { load(it) }
 }
 
 android {
@@ -7,17 +16,41 @@ android {
     compileSdk = 37
 
     defaultConfig {
-        applicationId = "dev.pilcrow.editor"
+        applicationId = "io.github.kleokl7.pilcrow"
         minSdk = 29
         targetSdk = 36
         versionCode = 1
         versionName = "0.1.0"
     }
 
+    signingConfigs {
+        if (keystoreProps.isNotEmpty()) {
+            create("release") {
+                storeFile = file(keystoreProps.getProperty("storeFile"))
+                storePassword = keystoreProps.getProperty("storePassword")
+                keyAlias = keystoreProps.getProperty("keyAlias")
+                keyPassword = keystoreProps.getProperty("keyPassword")
+            }
+        }
+    }
+
+    buildTypes {
+        release {
+            // No code shrinking: the editor reaches Kotlin through @JavascriptInterface names.
+            isMinifyEnabled = false
+            signingConfig = signingConfigs.findByName("release")
+        }
+    }
+
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
+}
+
+// APK files are named after the app: pilcrow-<version>-<build type>.apk
+base {
+    archivesName = "pilcrow-${android.defaultConfig.versionName}"
 }
 
 dependencies {
