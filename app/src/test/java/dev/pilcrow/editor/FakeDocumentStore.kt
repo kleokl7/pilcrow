@@ -19,9 +19,11 @@ class FakeDocumentStore : DocumentStore {
     var crash = false               // meta and read throw something that is neither IOException nor SecurityException
     var revoked = false             // every call throws NeedsPicker
     var hideMeta = false            // size and lastModified come back null
-    var persistable = true
+    var persistable = true          // the sender let the app keep access
+    val lost = HashSet<String>()    // files whose access has ended, as after "Open with" once the app closed
     var clock = 1_000L
     val persisted = ArrayList<String>()
+    val askedToPersist = ArrayList<String>()
 
     fun put(uri: String, name: String, bytes: ByteArray, lastModified: Long? = clock) {
         files[uri] = Entry(bytes, name, lastModified)
@@ -40,7 +42,7 @@ class FakeDocumentStore : DocumentStore {
     fun bytes(uri: String): ByteArray = files.getValue(uri).bytes
 
     private fun entry(uri: String): Entry {
-        if (revoked) throw NeedsPicker()
+        if (revoked || uri in lost) throw NeedsPicker()
         if (crash) throw IllegalStateException("provider fell over")
         return files[uri] ?: throw IOException("No such file: $uri")
     }
@@ -75,9 +77,12 @@ class FakeDocumentStore : DocumentStore {
     }
 
     override fun persist(uri: String, canWrite: Boolean): Boolean {
-        if (persistable) persisted += uri
+        askedToPersist += uri
+        if (persistable && uri !in persisted) persisted += uri
         return persistable
     }
+
+    override fun hasAccess(uri: String): Boolean = !revoked && uri !in lost
 
     override fun providerLabel(uri: String): String = "Drive"
 }

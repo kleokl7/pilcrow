@@ -4,6 +4,7 @@ import android.annotation.SuppressLint
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Intent
+import android.content.SharedPreferences
 import android.content.pm.ApplicationInfo
 import android.net.Uri
 import android.os.Bundle
@@ -49,7 +50,7 @@ class MainActivity : ComponentActivity(), Session.Effects {
 
     private val pickDocument = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
         val uri = result.data?.data
-        if (result.resultCode == RESULT_OK && uri != null) onSession { openUri(uri.toString(), canWrite = true, fromPicker = true) }
+        if (result.resultCode == RESULT_OK && uri != null) onSession { openUri(uri.toString(), canWrite = true, fromPicker = true) } else onSession { onPickCancelled() }
     }
 
     private val createDocument = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
@@ -64,7 +65,6 @@ class MainActivity : ComponentActivity(), Session.Effects {
         // Remote inspection of the editor is for debug builds only, never for a released app.
         WebView.setWebContentsDebuggingEnabled(applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE != 0)
 
-        val prefs = getPreferences(MODE_PRIVATE)
         session = Session(
             store = SafDocumentStore(applicationContext),
             drafts = DraftStore(File(filesDir, "drafts")) { System.currentTimeMillis() },
@@ -73,9 +73,9 @@ class MainActivity : ComponentActivity(), Session.Effects {
             now = { System.currentTimeMillis() },
             emit = ::emit,
             effects = this,
-            viewMode = prefs.getString(PREF_VIEW_MODE, "formatted") ?: "formatted",
+            settings = PrefsSettings(getPreferences(MODE_PRIVATE)),
             pause = { ms -> Thread.sleep(ms) },
-        ) { mode -> prefs.edit().putString(PREF_VIEW_MODE, mode).apply() }
+        )
 
         val assets = WebViewAssetLoader.Builder()
             // The handler serves the APK's assets folder: /assets/editor/index.html is assets/editor/index.html.
@@ -151,7 +151,10 @@ class MainActivity : ComponentActivity(), Session.Effects {
         super.onDestroy()
     }
 
-    /** "Open with" from Drive or a file manager. The permission lasts only as long as this activity. */
+    /**
+     * "Open with" from Drive or a file manager. The session asks to keep access; Drive usually lends the file
+     * only until this activity finishes, and the note then asks to be found once in the picker.
+     */
     private fun handleIntent(intent: Intent?) {
         val uri = intent?.data ?: return
         if (intent.action != Intent.ACTION_VIEW && intent.action != Intent.ACTION_EDIT) return
@@ -207,7 +210,22 @@ class MainActivity : ComponentActivity(), Session.Effects {
 
     private companion object {
         const val START_URL = "https://appassets.androidplatform.net/assets/editor/index.html"
-        const val PREF_VIEW_MODE = "viewMode"
         const val PAUSE_WAIT_MS = 1500L
+    }
+}
+
+/** The session's settings, in this activity's preferences. Safe to use from the session thread. */
+private class PrefsSettings(private val prefs: SharedPreferences) : Session.Settings {
+    override var viewMode: String
+        get() = prefs.getString(VIEW_MODE, "formatted") ?: "formatted"
+        set(value) = prefs.edit().putString(VIEW_MODE, value).apply()
+
+    override var lineNumbers: Boolean
+        get() = prefs.getBoolean(LINE_NUMBERS, false)
+        set(value) = prefs.edit().putBoolean(LINE_NUMBERS, value).apply()
+
+    private companion object {
+        const val VIEW_MODE = "viewMode"
+        const val LINE_NUMBERS = "lineNumbers"
     }
 }

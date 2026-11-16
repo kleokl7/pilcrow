@@ -73,3 +73,19 @@
 .pc-table th:last-child, .pc-table td:last-child { padding-right: 0; }
 .pc-props { margin: 2px 18px 12px 18px; padding: 7px 12px 7px 16px; border-radius: 9px; background: var(--surface); color: var(--ink-2); font-size: 13.5px; line-height: 1.5; cursor: pointer; display: flex; justify-content: space-between; align-items: center; }
 .pc-props::after { content: ""; width: 7px; height: 7px; margin: -3px 3px 0 0; border-right: 2px solid currentColor; border-bottom: 2px solid currentColor; transform: rotate(45deg); }
+
+/* ---------- Line numbers: in the margin the text already leaves on the left ----------
+   --lh is the height of the line's first row and --pt the space above it, as for the margin marks.
+   On the cursor line of a heading or quote the mark takes the margin; the number comes back when the cursor leaves. */
+#app .pc-source.pc-lines .cm-line { position: relative; padding-left: 34px; --lh: 22.4px; }
+#app .pc-formatted .cm-line[data-li="task"] { --pt: 3px; }
+.pc-codeblock { --lh: 21.75px; }
+.pc-table-source, .pc-frontmatter { --lh: 20.25px; }
+#app .pc-lines .cm-line[data-ln]:not([data-mark])::before {
+  content: attr(data-ln);
+  position: absolute; left: 0; top: var(--pt, 0px); width: 28px; height: var(--lh, 25.5px);
+  display: flex; align-items: center; justify-content: flex-end;
+  font: 400 11px/1 var(--mono); letter-spacing: 0; text-indent: 0; font-variant-numeric: tabular-nums;
+  color: var(--ink-3); pointer-events: none;
+}
+#app .pc-lines .pc-active[data-ln]::before { color: var(--ink-2); }

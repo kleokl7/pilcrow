@@ -20,9 +20,13 @@ edit that file. Saving writes back to the same file. There is no copy, no import
 ## What it does
 
 - **Opens notes in place.** Through the Android file picker, or "Open with" from Drive and
-  from file managers. Recently opened notes are listed on the home screen.
+  from file managers. Recently opened notes are listed on the home screen. Drive lends a note
+  opened from its own app only until Pilcrow closes. When that access has ended, the note says
+  so on the home screen, and finding it once in the picker keeps it for good.
 - **Two views of one file.** *Formatted* is editable and hides the Markdown marks until the
   cursor is on them. *Source* shows the raw text. The ¶ button switches between them.
+- **Line numbers, if you want them.** Turn them on in the ⋮ menu. They sit in the left margin
+  in both views and count lines the way the file does.
 - **Understands the Markdown people write in Obsidian.** Headings, lists, task lists,
   tables, quotes, code, links, `[[wikilinks]]` and YAML properties.
 - **Leaves the rest of your file alone.** The Markdown you wrote is the file. Pilcrow never
@@ -39,7 +43,7 @@ edit that file. Saving writes back to the same file. There is no copy, no import
 ## Status
 
 Pilcrow is at **0.1.0**, its first public version, and it is young. The editor and the
-save logic are covered by 163 automated tests, and the release build was run on an Android 16
+save logic are covered by 182 automated tests, and the release build was run on an Android 16
 emulator: it opened a local note, saved typed text and a ticked checkbox back to the file, and
 switched views. Testing on real phones against Google Drive has only just started.
 

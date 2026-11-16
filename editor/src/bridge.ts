@@ -6,6 +6,9 @@ export interface NativeApi {
   openPicker(): void;
   createNote(): void;
   openRecent(id: string): void;
+  /** Opens the picker to find a note the app lost access to. The file picked there takes the old entry's place. */
+  findAgain(id: string): void;
+  forgetRecent(id: string): void;
   /** `token` names the document the text belongs to; it comes from that document's event. */
   docChanged(token: string, text: string): void;
   closeDocument(): void;
@@ -13,6 +16,7 @@ export interface NativeApi {
   resolveConflict(choice: "mine" | "theirs" | "copy"): void;
   answerDraftOffer(restore: boolean): void;
   setViewMode(mode: ViewMode): void;
+  setLineNumbers(on: boolean): void;
   requestDrafts(): void;
   readDraft(id: string): void;
   discardDraft(id: string): void;
@@ -27,6 +31,8 @@ export interface RecentNote {
   place: string;
   openedAt: number;
   unsavedAt: number | null;
+  /** The app can no longer open this note without the user finding it again. */
+  lost: boolean;
 }
 export interface DraftRow {
   id: string;
@@ -38,17 +44,22 @@ export type SaveStateName = "saved" | "saving" | "failed" | "conflict";
 
 /** Native → web. Kotlin calls window.pilcrow.dispatch(jsonString). */
 export type NativeEvent =
-  | { type: "home"; recents: RecentNote[]; viewMode: ViewMode }
+  /** Sent once, before anything else. */
+  | { type: "settings"; viewMode: ViewMode; lineNumbers: boolean }
+  | { type: "home"; recents: RecentNote[] }
   | { type: "document"; token: string; name: string; text: string; readOnly: boolean; notice: string | null; draftOfferAt: number | null }
   | { type: "saveState"; state: SaveStateName }
   | { type: "drafts"; drafts: DraftRow[] }
   | { type: "draftText"; id: string; name: string; text: string }
   | { type: "notice"; message: string }
+  /** A recent note could not be opened because access to it has ended. */
+  | { type: "lost"; id: string; name: string }
   | { type: "back" };
 
 const METHODS: (keyof NativeApi)[] = [
-  "ready", "openPicker", "createNote", "openRecent", "docChanged", "closeDocument", "retrySave", "resolveConflict",
-  "answerDraftOffer", "setViewMode", "requestDrafts", "readDraft", "discardDraft", "copyText", "openUrl", "exitApp",
+  "ready", "openPicker", "createNote", "openRecent", "findAgain", "forgetRecent", "docChanged", "closeDocument", "retrySave",
+  "resolveConflict", "answerDraftOffer", "setViewMode", "setLineNumbers", "requestDrafts", "readDraft", "discardDraft", "copyText",
+  "openUrl", "exitApp",
 ];
 
 /** A stand-in for the Android side that records every call as "method(arg, …)". */

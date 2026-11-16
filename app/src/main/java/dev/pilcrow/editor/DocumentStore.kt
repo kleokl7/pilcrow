@@ -2,7 +2,9 @@ package dev.pilcrow.editor
 
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.net.Uri
+import android.os.Process
 import android.provider.DocumentsContract
 import android.provider.OpenableColumns
 import java.io.IOException
@@ -18,8 +20,14 @@ interface DocumentStore {
     fun read(uri: String): ByteArray
     fun write(uri: String, bytes: ByteArray)
 
-    /** Asks to keep access after the app is closed. True when the provider agreed. */
+    /**
+     * Asks to keep access after the app is closed. True when the app that sent the file agreed.
+     * The picker always agrees. "Open with" from Drive usually lends the file only while Pilcrow is open.
+     */
     fun persist(uri: String, canWrite: Boolean): Boolean
+
+    /** False when the app can no longer reach this file, without asking the provider. Cheap enough for every Home row. */
+    fun hasAccess(uri: String): Boolean
 
     /** A short name for where the file lives: "Drive", "This phone". Empty when unknown. */
     fun providerLabel(uri: String): String
@@ -76,13 +84,29 @@ class SafDocumentStore(private val context: Context) : DocumentStore {
         throw IOException("Could not write $uri", last)
     }
 
-    override fun persist(uri: String, canWrite: Boolean): Boolean =
+    override fun persist(uri: String, canWrite: Boolean): Boolean {
+        val u = Uri.parse(uri)
+        val read = Intent.FLAG_GRANT_READ_URI_PERMISSION
+        // Asking for more than was granted fails as a whole. A file lent read-only must still be kept for reading.
+        val asks = if (canWrite) listOf(read or Intent.FLAG_GRANT_WRITE_URI_PERMISSION, read) else listOf(read)
+        return asks.any { flags ->
+            try {
+                resolver.takePersistableUriPermission(u, flags)
+                true
+            } catch (e: Exception) {
+                false
+            }
+        }
+    }
+
+    override fun hasAccess(uri: String): Boolean =
         try {
-            val flags = Intent.FLAG_GRANT_READ_URI_PERMISSION or (if (canWrite) Intent.FLAG_GRANT_WRITE_URI_PERMISSION else 0)
-            resolver.takePersistableUriPermission(Uri.parse(uri), flags)
-            true
+            // Counts both kinds of grant: kept ones, and ones lent for as long as the app is open.
+            context.checkUriPermission(Uri.parse(uri), Process.myPid(), Process.myUid(), Intent.FLAG_GRANT_READ_URI_PERMISSION) ==
+                PackageManager.PERMISSION_GRANTED
         } catch (e: Exception) {
-            false
+            // Unknown: say yes, and let opening the note find out.
+            true
         }
 
     override fun providerLabel(uri: String): String {

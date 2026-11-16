@@ -8,6 +8,7 @@ export interface EditorScreenOptions {
   name: string;
   text: string;
   mode: ViewMode;
+  lineNumbers: boolean;
   readOnly: boolean;
   notice: string | null;
   draftOfferAt: number | null;
@@ -79,6 +80,7 @@ export function renderEditorScreen(opts: EditorScreenOptions): EditorScreen {
     parent: host,
     doc: opts.text,
     mode: opts.mode,
+    lineNumbers: opts.lineNumbers,
     readOnly: opts.readOnly,
     onChange: opts.onChange,
     onOpenUrl: opts.onOpenUrl,

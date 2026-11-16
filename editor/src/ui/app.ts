@@ -3,7 +3,7 @@ import type { ViewMode } from "../editor/setup";
 import { h } from "./dom";
 import { type EditorScreen, renderEditorScreen } from "./editor-screen";
 import { renderHome } from "./home";
-import { type Sheet, Sheets, conflictQuestion, draftList, draftText, menu } from "./sheets";
+import { type Sheet, Sheets, conflictQuestion, draftList, draftText, lostNote, menu } from "./sheets";
 
 /** How long a one-line notice stays on screen. */
 const NOTICE_MS = 4000;
@@ -13,6 +13,7 @@ export function mountApp(root: HTMLElement, native: NativeApi): void {
   const stage = root.appendChild(h("div", { class: "pc-stage" }));
   const sheets = new Sheets(root);
   let viewMode: ViewMode = "formatted";
+  let lineNumbers = false;
   let recents: RecentNote[] = [];
   let screen: EditorScreen | null = null;
   let conflict: Sheet | null = null;
@@ -58,6 +59,7 @@ export function mountApp(root: HTMLElement, native: NativeApi): void {
       name: event.name,
       text: event.text,
       mode: viewMode,
+      lineNumbers,
       readOnly: event.readOnly,
       notice: event.notice,
       draftOfferAt: event.draftOfferAt,
@@ -66,6 +68,14 @@ export function mountApp(root: HTMLElement, native: NativeApi): void {
         const sheet = sheets.open(menu([
           { label: "Find in note", run: () => current.find() },
           { label: current.editor.getMode() === "source" ? "Show formatted note" : "Show Markdown source", run: () => current.toggleMode() },
+          {
+            label: lineNumbers ? "Hide line numbers" : "Show line numbers",
+            run: () => {
+              lineNumbers = !lineNumbers;
+              current.editor.setLineNumbers(lineNumbers);
+              native.setLineNumbers(lineNumbers);
+            },
+          },
           { label: "Recent drafts", run: openDrafts },
         ], () => sheet.close()));
       },
@@ -92,8 +102,11 @@ export function mountApp(root: HTMLElement, native: NativeApi): void {
 
   installDispatcher((event) => {
     switch (event.type) {
-      case "home":
+      case "settings":
         viewMode = event.viewMode;
+        lineNumbers = event.lineNumbers;
+        break;
+      case "home":
         recents = event.recents;
         showHome();
         break;
@@ -128,6 +141,20 @@ export function mountApp(root: HTMLElement, native: NativeApi): void {
       case "notice":
         toast(event.message);
         break;
+      case "lost": {
+        sheets.closeAll(false);
+        const sheet = sheets.open(lostNote(event.name, {
+          find: () => {
+            sheet.close();
+            native.findAgain(event.id);
+          },
+          forget: () => {
+            sheet.close();
+            native.forgetRecent(event.id);
+          },
+        }));
+        break;
+      }
       case "back": {
         const top = sheets.top();
         if (top) {

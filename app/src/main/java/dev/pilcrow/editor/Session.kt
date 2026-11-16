@@ -17,10 +17,9 @@ class Session(
     private val now: () -> Long,
     private val emit: (JSONObject) -> Unit,
     private val effects: Effects,
-    private var viewMode: String,
+    private val settings: Settings,
     /** Waits that many milliseconds; passed on to the save logic. Real time on the phone, nothing in tests. */
     private val pause: (Long) -> Unit = {},
-    private val onViewMode: (String) -> Unit,
 ) {
     /** The things only Android can do. */
     interface Effects {
@@ -29,6 +28,13 @@ class Session(
         fun openUrl(url: String)
         fun copyText(text: String)
         fun closeApp()
+    }
+
+    /** What the user chose once and expects to find again: Android's preferences on the phone. */
+    interface Settings {
+        /** "formatted" or "source". */
+        var viewMode: String
+        var lineNumbers: Boolean
     }
 
     private class Pending(val uri: String, val canWrite: Boolean, val fromPicker: Boolean)
@@ -44,6 +50,8 @@ class Session(
     private var controller: SaveController? = null
     private var offeredDraftId: String? = null
     private var copyBytes: ByteArray? = null
+    /** The recent entry whose file the user is looking for in the picker. The file they pick takes its place. */
+    private var findingId: String? = null
 
     private var tokenCounter = 0
     private var currentToken: String? = null
@@ -54,15 +62,25 @@ class Session(
     fun onWebReady() {
         webReady = true
         drafts.prune()
+        emit(JSONObject().put("type", "settings").put("viewMode", settings.viewMode).put("lineNumbers", settings.lineNumbers))
         val waiting = pending
         pending = null
-        if (waiting != null) load(waiting.uri, waiting.canWrite, waiting.fromPicker, pickerFallback = false) else emitHome()
+        if (waiting != null) load(waiting.uri, waiting.canWrite, waiting.fromPicker) else emitHome()
     }
 
-    fun openPicker() = effects.launchPicker(null)
+    fun openPicker() {
+        findingId = null
+        effects.launchPicker(null)
+    }
+
+    /** The picker was closed without a file. */
+    fun onPickCancelled() {
+        findingId = null
+    }
 
     fun createNote() {
         copyBytes = null
+        findingId = null
         effects.launchCreate("Untitled.md")
     }
 
@@ -73,13 +91,26 @@ class Session(
             return
         }
         controller?.flush()
-        load(uri, canWrite, fromPicker, pickerFallback = false)
+        load(uri, canWrite, fromPicker)
     }
 
     fun openRecent(id: String) {
         val recent = recents.find(id) ?: return emitHome()
         controller?.flush()
-        load(recent.uri, canWrite = true, fromPicker = false, pickerFallback = true)
+        load(recent.uri, canWrite = true, fromPicker = false, recentId = id)
+    }
+
+    /** The user will look for a note the app lost access to. The file they pick replaces its entry. */
+    fun findAgain(id: String) {
+        val recent = recents.find(id) ?: return emitHome()
+        findingId = id
+        effects.launchPicker(recent.uri)
+    }
+
+    /** Takes a note off the recents list. Its drafts stay where they are. */
+    fun forgetRecent(id: String) {
+        recents.remove(id)
+        emitHome()
     }
 
     /** The user chose where to create a file: either a new empty note, or the copy of a conflicted one. */
@@ -103,7 +134,7 @@ class Session(
         } else {
             controller?.flush()
         }
-        load(uri, canWrite = true, fromPicker = true, pickerFallback = false)
+        load(uri, canWrite = true, fromPicker = true)
     }
 
     fun onCreateCancelled() {
@@ -145,7 +176,7 @@ class Session(
                     current.resolve(ConflictChoice.THEIRS)
                     retire()
                     // Opens the other device's version; the user's own text comes back as a draft offer.
-                    load(uri, canWrite = true, fromPicker = false, pickerFallback = false)
+                    load(uri, canWrite = true, fromPicker = false)
                 }
                 "copy" -> {
                     val target = current.resolve(ConflictChoice.COPY) as Resolution.NeedsCopyTarget
@@ -179,8 +210,11 @@ class Session(
 
     fun setViewMode(mode: String) {
         if (mode != "formatted" && mode != "source") return
-        viewMode = mode
-        onViewMode(mode)
+        settings.viewMode = mode
+    }
+
+    fun setLineNumbers(on: Boolean) {
+        settings.lineNumbers = on
     }
 
     fun requestDrafts() {
@@ -241,15 +275,24 @@ class Session(
         offeredDraftId = null
     }
 
-    private fun load(uri: String, canWrite: Boolean, fromPicker: Boolean, pickerFallback: Boolean) {
+    /** @param recentId set when the note was tapped in the recents list. */
+    private fun load(uri: String, canWrite: Boolean, fromPicker: Boolean, recentId: String? = null) {
+        // Only the picker's answer can be the note the user went looking for.
+        val replaces = if (fromPicker) findingId.also { findingId = null } else null
         val meta: DocMeta
         val bytes: ByteArray
         try {
             meta = store.meta(uri)
             bytes = store.read(uri)
         } catch (e: NeedsPicker) {
-            failOpen("Drive did not keep access to this note. Pick it again.")
-            if (pickerFallback) effects.launchPicker(uri)
+            if (recentId != null) {
+                // Usually a note that came with "Open with": access ended when the app closed. Explain before any picker.
+                retire()
+                emitHome()
+                emit(JSONObject().put("type", "lost").put("id", recentId).put("name", recents.find(recentId)?.name ?: ""))
+            } else {
+                failOpen("Drive did not keep access to this note. Pick it again.")
+            }
             return
         } catch (e: Exception) {
             // Providers are other apps' code: anything can come out of them, and none of it may end this app.
@@ -258,7 +301,9 @@ class Session(
         }
 
         retire()
-        val persisted = if (fromPicker) store.persist(uri, canWrite) else recents.find(idOf(uri))?.persisted ?: false
+        // Asked every time, also for "Open with": some senders allow it. The list remembers whether it worked.
+        val persisted = store.persist(uri, canWrite)
+        if (replaces != null && replaces != idOf(uri)) recents.remove(replaces)
         recents.touch(uri, meta.name, store.providerLabel(uri), persisted, now())
         openUriString = uri
         openName = meta.name
@@ -309,10 +354,11 @@ class Session(
             rows.put(
                 JSONObject().put("id", recent.id).put("name", recent.name).put("place", recent.place)
                     .put("openedAt", recent.openedAt)
-                    .put("unsavedAt", drafts.unsavedFor(recent.uri)?.first?.updatedAt ?: JSONObject.NULL),
+                    .put("unsavedAt", drafts.unsavedFor(recent.uri)?.first?.updatedAt ?: JSONObject.NULL)
+                    .put("lost", !store.hasAccess(recent.uri)),
             )
         }
-        emit(JSONObject().put("type", "home").put("recents", rows).put("viewMode", viewMode))
+        emit(JSONObject().put("type", "home").put("recents", rows))
     }
 
     private fun documentEvent(token: String, name: String, text: String, readOnly: Boolean, notice: String?, draftOfferAt: Long?): JSONObject =

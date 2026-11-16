@@ -13,12 +13,15 @@ class Bridge(private val post: (Session.() -> Unit) -> Unit) {
     @JavascriptInterface fun openPicker(): Unit = post { openPicker() }
     @JavascriptInterface fun createNote(): Unit = post { createNote() }
     @JavascriptInterface fun openRecent(id: String): Unit = post { openRecent(id) }
+    @JavascriptInterface fun findAgain(id: String): Unit = post { findAgain(id) }
+    @JavascriptInterface fun forgetRecent(id: String): Unit = post { forgetRecent(id) }
     @JavascriptInterface fun docChanged(token: String, text: String): Unit = post { docChanged(token, text) }
     @JavascriptInterface fun closeDocument(): Unit = post { closeDocument() }
     @JavascriptInterface fun retrySave(): Unit = post { retrySave() }
     @JavascriptInterface fun resolveConflict(choice: String): Unit = post { resolveConflict(choice) }
     @JavascriptInterface fun answerDraftOffer(restore: Boolean): Unit = post { answerDraftOffer(restore) }
     @JavascriptInterface fun setViewMode(mode: String): Unit = post { setViewMode(mode) }
+    @JavascriptInterface fun setLineNumbers(on: Boolean): Unit = post { setLineNumbers(on) }
     @JavascriptInterface fun requestDrafts(): Unit = post { requestDrafts() }
     @JavascriptInterface fun readDraft(id: String): Unit = post { readDraft(id) }
     @JavascriptInterface fun discardDraft(id: String): Unit = post { discardDraft(id) }

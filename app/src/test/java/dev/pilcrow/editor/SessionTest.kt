@@ -17,7 +17,10 @@ class SessionTest {
     private val drive = FakeDocumentStore()
     private val clock = FakeScheduler()
     private val emitted = ArrayList<JSONObject>()
-    private val savedModes = ArrayList<String>()
+    private val settings = object : Session.Settings {
+        override var viewMode = "formatted"
+        override var lineNumbers = false
+    }
     private val drafts: DraftStore by lazy { DraftStore(tmp.newFolder("drafts")) { clock.now + 50_000 } }
     private val recents: RecentsStore by lazy { RecentsStore(File(tmp.root, "recents.json")) }
 
@@ -35,7 +38,7 @@ class SessionTest {
     }
 
     private val session: Session by lazy {
-        Session(drive, drafts, recents, clock, { clock.now + 50_000 }, { emitted += it }, fx, "formatted", {}) { savedModes += it }
+        Session(drive, drafts, recents, clock, { clock.now + 50_000 }, { emitted += it }, fx, settings) {}
     }
 
     private fun last(type: String): JSONObject = emitted.last { it.getString("type") == type }
@@ -56,7 +59,6 @@ class SessionTest {
         drafts.put(uri, "Weekly review.md", "unsaved words")
         session.onWebReady()
         val home = last("home")
-        assertEquals("formatted", home.getString("viewMode"))
         val row = home.getJSONArray("recents").getJSONObject(0)
         assertEquals("Weekly review.md", row.getString("name"))
         assertEquals("Drive", row.getString("place"))
@@ -70,7 +72,7 @@ class SessionTest {
         session.openUri(uri, canWrite = true, fromPicker = false)
         assertTrue(emitted.isEmpty())
         session.onWebReady()
-        assertEquals("document", emitted.first().getString("type"))
+        assertEquals(listOf("settings", "document"), types().take(2))
         assertFalse(types().contains("home"))
     }
 
@@ -88,9 +90,17 @@ class SessionTest {
         assertEquals(listOf(uri), drive.persisted)
     }
 
-    @Test fun `open with does not ask to persist`() {
+    @Test fun `open with asks to keep access, and keeps it when the sender allows`() {
         openNote(fromPicker = false)
-        assertTrue(drive.persisted.isEmpty())
+        assertEquals(listOf(uri), drive.persisted)
+        assertTrue(recents.list().single().persisted)
+        assertFalse(last("document").getBoolean("readOnly"))
+    }
+
+    @Test fun `open with from a sender that only lends the file records that access will end`() {
+        drive.persistable = false
+        openNote(fromPicker = false)
+        assertEquals(listOf(uri), drive.askedToPersist)
         assertFalse(recents.list().single().persisted)
         assertFalse(last("document").getBoolean("readOnly"))
     }
@@ -153,17 +163,71 @@ class SessionTest {
         assertEquals("This note mixed two kinds of line endings. It will be saved with one.", last("notice").getString("message"))
     }
 
-    @Test fun `openRecent falls back to picker`() {
+    /** A note in the recents list that the app can no longer reach, as after "Open with" once the app was closed. */
+    private fun lostRecent() {
         drive.put(uri, "Weekly review.md", "one\n".toByteArray())
         recents.touch(uri, "Weekly review.md", "Drive", false, 10)
+        drive.lost += uri
         session.onWebReady()
-        drive.revoked = true
+    }
+
+    @Test fun `a recent note that lost access says so, and waits before opening the picker`() {
+        lostRecent()
         emitted.clear()
         session.openRecent(idOf(uri))
-        assertEquals("home", emitted.first().getString("type"))
-        assertEquals("Drive did not keep access to this note. Pick it again.", last("notice").getString("message"))
+        assertEquals(listOf("home", "lost"), types())
+        assertEquals(idOf(uri), last("lost").getString("id"))
+        assertEquals("Weekly review.md", last("lost").getString("name"))
+        assertEquals("never", fx.pickerLaunchedWith)
+    }
+
+    @Test fun `finding a lost note again replaces its old entry`() {
+        lostRecent()
+        session.openRecent(idOf(uri))
+        session.findAgain(idOf(uri))
         assertEquals(uri, fx.pickerLaunchedWith)
-        assertFalse(types().contains("document"))
+        val found = "content://drive/found"
+        drive.put(found, "Weekly review.md", "one\n".toByteArray())
+        session.openUri(found, canWrite = true, fromPicker = true)
+        assertEquals("Weekly review.md", last("document").getString("name"))
+        assertEquals(listOf(found), recents.list().map { it.uri })
+        assertTrue(recents.list().single().persisted)
+    }
+
+    @Test fun `a lost note keeps its entry when the search is cancelled`() {
+        lostRecent()
+        session.findAgain(idOf(uri))
+        session.onPickCancelled()
+        val other = "content://drive/other"
+        drive.put(other, "Other.md", "two\n".toByteArray())
+        session.openUri(other, canWrite = true, fromPicker = true)
+        assertEquals(setOf(uri, other), recents.list().map { it.uri }.toSet())
+    }
+
+    @Test fun `a lost note keeps its entry when the note picked instead does not open`() {
+        lostRecent()
+        session.findAgain(idOf(uri))
+        session.openUri("content://drive/missing", canWrite = true, fromPicker = true)
+        assertEquals(listOf(uri), recents.list().map { it.uri })
+    }
+
+    @Test fun `a lost note can be taken off the list`() {
+        lostRecent()
+        session.forgetRecent(idOf(uri))
+        assertTrue(recents.list().isEmpty())
+        assertEquals(0, last("home").getJSONArray("recents").length())
+    }
+
+    @Test fun `home marks the notes that can no longer be reached`() {
+        val other = "content://drive/other"
+        recents.touch(uri, "Weekly review.md", "Drive", true, 10)
+        recents.touch(other, "Other.md", "Drive", false, 20)
+        drive.lost += other
+        session.onWebReady()
+        val rows = last("home").getJSONArray("recents")
+        assertEquals("Other.md", rows.getJSONObject(0).getString("name"))
+        assertTrue(rows.getJSONObject(0).getBoolean("lost"))
+        assertFalse(rows.getJSONObject(1).getBoolean("lost"))
     }
 
     @Test fun `open with after the permission is gone returns home without the picker`() {
@@ -406,14 +470,30 @@ class SessionTest {
         assertTrue(drafts.list().isEmpty())
     }
 
-    @Test fun `view mode is remembered and sent with home`() {
+    @Test fun `settings are sent first when the web app is ready`() {
+        settings.viewMode = "source"
+        settings.lineNumbers = true
+        session.onWebReady()
+        val first = emitted.first()
+        assertEquals("settings", first.getString("type"))
+        assertEquals("source", first.getString("viewMode"))
+        assertTrue(first.getBoolean("lineNumbers"))
+    }
+
+    @Test fun `view mode is remembered`() {
         session.onWebReady()
         session.setViewMode("source")
-        assertEquals(listOf("source"), savedModes)
-        session.closeDocument()
-        assertEquals("source", last("home").getString("viewMode"))
+        assertEquals("source", settings.viewMode)
         session.setViewMode("nonsense")
-        assertEquals(listOf("source"), savedModes)
+        assertEquals("source", settings.viewMode)
+    }
+
+    @Test fun `line numbers are remembered`() {
+        session.onWebReady()
+        session.setLineNumbers(true)
+        assertTrue(settings.lineNumbers)
+        session.setLineNumbers(false)
+        assertFalse(settings.lineNumbers)
     }
 
     @Test fun `back, copy and exit go to the right place`() {
@@ -429,8 +509,13 @@ class SessionTest {
     @Test fun `event json uses the field names of the bridge contract`() {
         openNote()
         assertEquals(setOf("type", "token", "name", "text", "readOnly", "notice", "draftOfferAt"), last("document").fieldNames())
-        assertEquals(setOf("type", "recents", "viewMode"), last("home").fieldNames())
-        assertEquals(setOf("id", "name", "place", "openedAt", "unsavedAt"), recents.list().let { session.closeDocument(); last("home").getJSONArray("recents").getJSONObject(0).fieldNames() })
+        assertEquals(setOf("type", "viewMode", "lineNumbers"), last("settings").fieldNames())
         assertEquals(setOf("type", "state"), last("saveState").fieldNames())
+        session.closeDocument()
+        assertEquals(setOf("type", "recents"), last("home").fieldNames())
+        assertEquals(setOf("id", "name", "place", "openedAt", "unsavedAt", "lost"), last("home").getJSONArray("recents").getJSONObject(0).fieldNames())
+        drive.lost += uri
+        session.openRecent(idOf(uri))
+        assertEquals(setOf("type", "id", "name"), last("lost").fieldNames())
     }
 }

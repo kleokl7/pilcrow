@@ -15,8 +15,9 @@ function setup() {
   return { root, log, send, button, text };
 }
 
-const home = (recents: Extract<NativeEvent, { type: "home" }>["recents"] = [], viewMode: "formatted" | "source" = "formatted"): NativeEvent => ({
-  type: "home", recents, viewMode,
+const home = (recents: Extract<NativeEvent, { type: "home" }>["recents"] = []): NativeEvent => ({ type: "home", recents });
+const settings = (over: Partial<Extract<NativeEvent, { type: "settings" }>> = {}): NativeEvent => ({
+  type: "settings", viewMode: "formatted", lineNumbers: false, ...over,
 });
 const doc = (over: Partial<Extract<NativeEvent, { type: "document" }>> = {}): NativeEvent => ({
   type: "document", token: "t1", name: "Weekly review.md", text: "# Title\n\nbody", readOnly: false, notice: null, draftOfferAt: null, ...over,
@@ -33,8 +34,8 @@ test("home lists recents and shows unsaved changes in the caret colour", () => {
   const { root, send } = setup();
   const at = new Date(2026, 10, 16, 14, 2).getTime();
   send(home([
-    { id: "id1", name: "Quick note.md", place: "Drive", openedAt: Date.now() - 2 * HOUR, unsavedAt: null },
-    { id: "id2", name: "Content calendar.md", place: "Drive", openedAt: Date.now() - 30 * HOUR, unsavedAt: at },
+    { id: "id1", name: "Quick note.md", place: "Drive", openedAt: Date.now() - 2 * HOUR, unsavedAt: null, lost: false },
+    { id: "id2", name: "Content calendar.md", place: "Drive", openedAt: Date.now() - 30 * HOUR, unsavedAt: at, lost: false },
   ]));
   const rows = [...root.querySelectorAll(".pc-note")];
   expect(rows.length).toBe(2);
@@ -54,7 +55,7 @@ test("empty home invites to open a note", () => {
 
 test("buttons call the bridge", () => {
   const { root, log, send, button } = setup();
-  send(home([{ id: "id1", name: "A.md", place: "Drive", openedAt: Date.now(), unsavedAt: null }]));
+  send(home([{ id: "id1", name: "A.md", place: "Drive", openedAt: Date.now(), unsavedAt: null, lost: false }]));
   button("Open from Drive").click();
   button("New note").click();
   (root.querySelector(".pc-note") as HTMLButtonElement).click();
@@ -63,7 +64,7 @@ test("buttons call the bridge", () => {
 
 test("document event opens the editor with the stored view mode", () => {
   const { send, button, root } = setup();
-  send(home([], "source"));
+  send(settings({ viewMode: "source" }));
   send(doc());
   expect(root.querySelector(".pc-name")!.textContent).toBe("Weekly review");
   expect(button("Show Markdown source").getAttribute("aria-pressed")).toBe("true");
@@ -230,4 +231,61 @@ test("a notice shows and goes away", () => {
   expect(root.querySelector(".pc-toast")!.textContent).toBe("Drive did not keep access to this note. Pick it again.");
   vi.advanceTimersByTime(4000);
   expect(root.querySelector(".pc-toast")).toBeNull();
+});
+
+test("a note the app can no longer reach says so on home", () => {
+  const { root, send } = setup();
+  send(home([{ id: "id1", name: "Quick note.md", place: "Drive", openedAt: Date.now(), unsavedAt: null, lost: true }]));
+  expect(root.querySelector(".pc-note-place")!.textContent).toBe("No access. Tap to find it again");
+});
+
+test("unsaved changes outrank lost access on home", () => {
+  const { root, send } = setup();
+  const at = new Date(2026, 10, 16, 14, 2).getTime();
+  send(home([{ id: "id1", name: "Quick note.md", place: "Drive", openedAt: Date.now(), unsavedAt: at, lost: true }]));
+  expect(root.querySelector(".pc-note-place")!.textContent).toBe("Unsaved changes from 14:02");
+});
+
+test("a lost note explains itself, then finds the note again or takes it off the list", () => {
+  const { root, send, log, button } = setup();
+  send(home());
+  send({ type: "lost", id: "id1", name: "Quick note.md" });
+  const sheet = root.querySelector(".pc-sheet")!;
+  expect(sheet.textContent).toContain("Quick note");
+  expect([...sheet.querySelectorAll("button")].map((b) => b.textContent)).toEqual(["Find it in Drive", "Remove from the list"]);
+  button("Find it in Drive").click();
+  expect(log[log.length - 1]).toBe('findAgain("id1")');
+  expect(root.querySelector(".pc-sheet")).toBeNull();
+  send({ type: "lost", id: "id1", name: "Quick note.md" });
+  button("Remove from the list").click();
+  expect(log[log.length - 1]).toBe('forgetRecent("id1")');
+  send({ type: "lost", id: "id1", name: "Quick note.md" });
+  send({ type: "back" });
+  expect(root.querySelector(".pc-sheet")).toBeNull();
+});
+
+test("line numbers follow the stored setting", () => {
+  const { send, root } = setup();
+  send(settings({ lineNumbers: true }));
+  send(doc());
+  expect(root.querySelector(".cm-editor")!.classList.contains("pc-lines")).toBe(true);
+});
+
+test("the menu turns line numbers on and off and tells native", () => {
+  const { send, root, log, button } = setup();
+  send(settings());
+  send(doc());
+  const editor = () => root.querySelector(".cm-editor")!;
+  expect(editor().classList.contains("pc-lines")).toBe(false);
+  button("More").click();
+  button("Show line numbers").click();
+  expect(log[log.length - 1]).toBe("setLineNumbers(true)");
+  expect(editor().classList.contains("pc-lines")).toBe(true);
+  button("More").click();
+  button("Hide line numbers").click();
+  expect(log[log.length - 1]).toBe("setLineNumbers(false)");
+  expect(editor().classList.contains("pc-lines")).toBe(false);
+  send(home());
+  send(doc({ token: "t2" }));
+  expect(editor().classList.contains("pc-lines")).toBe(false);
 });

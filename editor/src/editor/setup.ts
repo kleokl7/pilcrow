@@ -9,6 +9,7 @@ import { tags as t } from "@lezer/highlight";
 import { blockPreview } from "./blocks";
 import { continueList, deleteHiddenMarkBackward } from "./commands";
 import { livePreview } from "./inline";
+import { lineNumbers } from "./lines";
 import { type MarksMode, focusTracking } from "./reveal";
 import { Wikilink } from "./wikilink";
 
@@ -18,6 +19,8 @@ export interface PilcrowEditor {
   view: EditorView;
   setMode(mode: ViewMode): void;
   getMode(): ViewMode;
+  setLineNumbers(on: boolean): void;
+  getLineNumbers(): boolean;
   setDoc(text: string): void;
   getText(): string;
   /** Reports a change that is still waiting, now. Call before anything that ends or replaces the note. */
@@ -30,6 +33,8 @@ export interface EditorOptions {
   parent: HTMLElement;
   doc: string;
   mode: ViewMode;
+  /** Numbers in the left margin. Off when left out. */
+  lineNumbers?: boolean;
   readOnly: boolean;
   onChange: (text: string) => void;
   onOpenUrl: (url: string) => void;
@@ -48,6 +53,7 @@ export function markdownLanguage(): Extension {
 }
 
 export const modeCompartment = new Compartment();
+const linesCompartment = new Compartment();
 
 /** Marks a transaction that replaces the document from outside (not typed by the user). */
 const external = Annotation.define<boolean>();
@@ -77,6 +83,7 @@ function formattedMode(opts: EditorOptions): Extension {
 
 export function createEditor(opts: EditorOptions): PilcrowEditor {
   let mode = opts.mode;
+  let numbered = opts.lineNumbers ?? false;
   let timer: ReturnType<typeof setTimeout> | null = null;
 
   const report = () => {
@@ -112,6 +119,7 @@ export function createEditor(opts: EditorOptions): PilcrowEditor {
         EditorState.readOnly.of(opts.readOnly),
         EditorView.editable.of(!opts.readOnly),
         modeCompartment.of(modeExtension(mode)),
+        linesCompartment.of(numbered ? lineNumbers() : []),
         EditorView.updateListener.of((update) => {
           if (!update.docChanged) return;
           if (update.transactions.every((tr) => tr.annotation(external))) return;
@@ -130,6 +138,12 @@ export function createEditor(opts: EditorOptions): PilcrowEditor {
       view.dispatch({ effects: modeCompartment.reconfigure(modeExtension(next)) });
     },
     getMode: () => mode,
+    setLineNumbers(on) {
+      if (on === numbered) return;
+      numbered = on;
+      view.dispatch({ effects: linesCompartment.reconfigure(on ? lineNumbers() : []) });
+    },
+    getLineNumbers: () => numbered,
     setDoc(text) {
       view.dispatch({
         changes: { from: 0, to: view.state.doc.length, insert: text },

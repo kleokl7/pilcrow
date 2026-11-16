@@ -31,7 +31,7 @@ export function renderHome(recents: RecentNote[], on: HomeHandlers): HTMLElement
     for (const note of recents) {
       list.append(noteRow({
         name: note.name,
-        second: note.unsavedAt !== null ? `Unsaved changes from ${clockTime(note.unsavedAt)}` : note.place,
+        second: note.unsavedAt !== null ? `Unsaved changes from ${clockTime(note.unsavedAt)}` : note.lost ? "No access. Tap to find it again" : note.place,
         unsaved: note.unsavedAt !== null,
         at: note.openedAt,
         onTap: () => on.onRecent(note.id),

@@ -68,6 +68,20 @@ export function conflictQuestion(answer: (choice: "mine" | "theirs" | "copy") =>
   );
 }
 
+/** A recent note that can no longer be opened: usually one that came from "Open with", once the app was closed. */
+export function lostNote(name: string, on: { find(): void; forget(): void }): HTMLElement {
+  const find = h("button", { type: "button", class: "pc-btn primary" }, "Find it in Drive");
+  find.addEventListener("click", on.find);
+  const forget = h("button", { type: "button", class: "pc-btn quiet" }, "Remove from the list");
+  forget.addEventListener("click", on.forget);
+  return h("div", { class: "pc-question" },
+    h("p", {}, `Pilcrow can no longer open ${displayName(name)}.`),
+    h("p", { class: "pc-question-more" }, "Notes opened from the Drive app are lent to Pilcrow until it closes. Find this one once in the picker and Pilcrow will keep access."),
+    find,
+    forget,
+  );
+}
+
 export function draftList(drafts: DraftRow[], onTap: (id: string) => void): HTMLElement {
   const list = h("div", { class: "pc-drafts" }, h("h2", {}, "Recent drafts"));
   if (!drafts.length) list.append(h("p", { class: "pc-empty" }, "No drafts. Pilcrow keeps a copy here of everything you type, for seven days."));
