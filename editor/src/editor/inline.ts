@@ -105,7 +105,8 @@ export function buildDecorations(
 
         if (name === "Frontmatter" || name === "Table") {
           // Drawn by the block widgets; when revealed they show as source lines.
-          eachLine(from, to, (lf) => lineClass(lf, name === "Table" ? "pc-table-source" : "pc-frontmatter"));
+          // A Frontmatter node ends after the line break of its closing "---".
+          eachLine(from, name === "Table" ? to : Math.max(from, to - 1), (lf) => lineClass(lf, name === "Table" ? "pc-table-source" : "pc-frontmatter"));
           return false;
         }
 

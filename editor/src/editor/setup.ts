@@ -6,6 +6,7 @@ import { markdown, markdownLanguage as gfm } from "@codemirror/lang-markdown";
 import { yamlFrontmatter } from "@codemirror/lang-yaml";
 import { search, searchKeymap } from "@codemirror/search";
 import { tags as t } from "@lezer/highlight";
+import { blockPreview } from "./blocks";
 import { livePreview } from "./inline";
 import type { MarksMode } from "./reveal";
 import { Wikilink } from "./wikilink";
@@ -63,6 +64,7 @@ function formattedMode(opts: EditorOptions): Extension {
   return [
     EditorView.editorAttributes.of({ class: MARKS_MODE === "dim" ? "pc-formatted pc-dim" : "pc-formatted" }),
     livePreview({ marks: MARKS_MODE, onOpenUrl: opts.onOpenUrl }),
+    blockPreview({ marks: MARKS_MODE }),
   ];
 }
 
