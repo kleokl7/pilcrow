@@ -13,5 +13,5 @@ import { SAMPLE_NOTE } from "./sample";
 const app = document.getElementById("app")!;
 
 if (new URLSearchParams(location.search).has("demo")) {
-  createEditor({ parent: app, doc: SAMPLE_NOTE, mode: "source", readOnly: false, onChange() {}, onOpenUrl() {} });
+  createEditor({ parent: app, doc: SAMPLE_NOTE, mode: "formatted", readOnly: false, onChange() {}, onOpenUrl() {} });
 }

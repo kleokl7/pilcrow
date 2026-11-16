@@ -6,6 +6,8 @@ import { markdown, markdownLanguage as gfm } from "@codemirror/lang-markdown";
 import { yamlFrontmatter } from "@codemirror/lang-yaml";
 import { search, searchKeymap } from "@codemirror/search";
 import { tags as t } from "@lezer/highlight";
+import { livePreview } from "./inline";
+import type { MarksMode } from "./reveal";
 import { Wikilink } from "./wikilink";
 
 export type ViewMode = "formatted" | "source";
@@ -28,6 +30,9 @@ export interface EditorOptions {
   onChange: (text: string) => void;
   onOpenUrl: (url: string) => void;
 }
+
+/** "hide" is the design. "dim" is the fallback if a phone keyboard misbehaves next to hidden marks (spec, Risk 2). */
+export const MARKS_MODE: MarksMode = "hide";
 
 /** How long typing must pause before the text is reported. */
 export const CHANGE_DEBOUNCE_MS = 250;
@@ -54,8 +59,11 @@ function sourceMode(): Extension {
   return [EditorView.editorAttributes.of({ class: "pc-source" }), syntaxHighlighting(sourceHighlight)];
 }
 
-function formattedMode(_opts: EditorOptions): Extension {
-  return [EditorView.editorAttributes.of({ class: "pc-formatted" })];
+function formattedMode(opts: EditorOptions): Extension {
+  return [
+    EditorView.editorAttributes.of({ class: MARKS_MODE === "dim" ? "pc-formatted pc-dim" : "pc-formatted" }),
+    livePreview({ marks: MARKS_MODE, onOpenUrl: opts.onOpenUrl }),
+  ];
 }
 
 export function createEditor(opts: EditorOptions): PilcrowEditor {
