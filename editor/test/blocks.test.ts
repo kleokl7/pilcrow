@@ -79,3 +79,11 @@ test("the properties widget counts and names its keys", () => {
   expect(one.dom.querySelector(".pc-props")!.textContent).toBe("1 property");
   one.destroy();
 });
+
+test("a note opens with its properties collapsed, although the cursor starts inside them", async () => {
+  const { focusField, setFocused } = await import("../src/editor/reveal");
+  const idle = EditorState.create({ doc: "---\na: 1\n---\n\n# T", extensions: [markdownLanguage(), focusField, blockPreview({ marks: "hide" })] });
+  expect(describe_(idle.field(blockField))).toContain("block.properties@0-12");
+  const focused = idle.update({ effects: setFocused.of(true) }).state;
+  expect(describe_(focused.field(blockField))).toEqual([]);
+});

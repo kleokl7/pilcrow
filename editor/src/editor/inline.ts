@@ -2,7 +2,7 @@ import { type EditorState, type Extension, Facet, type Range, RangeSet, StateEff
 import { Decoration, type DecorationSet, EditorView, ViewPlugin, type ViewUpdate } from "@codemirror/view";
 import { syntaxTree } from "@codemirror/language";
 import type { SyntaxNode } from "@lezer/common";
-import { type MarksMode, revealedAt, selectionTouches } from "./reveal";
+import { type MarksMode, focusField, revealedAt, selectionActive, selectionTouches } from "./reveal";
 import { BulletWidget, CheckboxWidget, RuleWidget } from "./widgets";
 
 export interface PreviewOptions {
@@ -257,7 +257,7 @@ export function buildDecorations(
   }
 
   // The lines the cursor is on.
-  for (const r of state.selection.ranges) {
+  for (const r of selectionActive(state) ? state.selection.ranges : []) {
     let l = doc.lineAt(r.from);
     for (let i = 0; i < MAX_ACTIVE_LINES; i++) {
       lineClass(l.from, "pc-active");
@@ -337,6 +337,7 @@ export const previewPlugin = ViewPlugin.fromClass(
         update.docChanged ||
         update.selectionSet ||
         update.viewportChanged ||
+        update.startState.field(focusField, false) !== update.state.field(focusField, false) ||
         syntaxTree(update.startState) !== syntaxTree(update.state) ||
         update.startState.facet(previewConfig) !== config
       ) {

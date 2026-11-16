@@ -1,0 +1,13 @@
+<!doctype html>
+<!-- Shows four states of the built editor side by side at phone size. Used by scripts/shots.sh. -->
+<meta charset="utf-8">
+<style>html,body{margin:0;background:#777}body{display:flex;gap:8px;padding:8px}iframe{border:0;width:384px;height:832px;flex:none}</style>
+<body>
+<script>
+  const theme = new URLSearchParams(location.search).get("theme") || "light";
+  for (const screen of ["home", "editor", "source", "conflict"]) {
+    const frame = document.createElement("iframe");
+    frame.src = `../app/src/main/assets/editor/index.html?demo&screen=${screen}&theme=${theme}`;
+    document.body.append(frame);
+  }
+</script>

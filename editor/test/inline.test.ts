@@ -134,3 +134,12 @@ test("a tap on a hidden link opens it and a tap on a checkbox toggles it", () =>
   expect(view.state.doc.toString()).toContain("- [x] a");
   view.destroy();
 });
+
+test("nothing is revealed and no line is active until the editor has focus", async () => {
+  const { focusField, setFocused } = await import("../src/editor/reveal");
+  const idle = EditorState.create({ doc: "## Title", selection: { anchor: 5 }, extensions: [markdownLanguage(), focusField] });
+  const all = [{ from: 0, to: 8 }];
+  expect(describe_(buildDecorations(idle, all, { marks: "hide" })).sort()).toEqual(["line.pc-h2@0", "replace@0-3"]);
+  const focused = idle.update({ effects: setFocused.of(true) }).state;
+  expect(describe_(buildDecorations(focused, all, { marks: "hide" }))).toContain("line.pc-h2.pc-active@0[data-mark=##]");
+});

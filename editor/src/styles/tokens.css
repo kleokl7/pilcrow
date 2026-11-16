@@ -18,7 +18,7 @@
 }
 
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root:not([data-theme="light"]) {
     --paper: #262624;
     --surface: #1F1E1D;
     --key: #393833;
@@ -33,3 +33,19 @@
     color-scheme: dark;
   }
 }
+
+/* The demo page can force a theme for screenshots. */
+:root[data-theme="dark"] {
+    --paper: #262624;
+    --surface: #1F1E1D;
+    --key: #393833;
+    --ink: #E6E4DC;
+    --ink-2: #A8A496;
+    --ink-3: #767264;
+    --rule: #393833;
+    --mark: #E8916F;
+    --mark-tint: #3A3128;
+    --wash: #2E2B27;
+    --caret: #D97757;
+    color-scheme: dark;
+  }

@@ -9,7 +9,7 @@ import { tags as t } from "@lezer/highlight";
 import { blockPreview } from "./blocks";
 import { continueList, deleteHiddenMarkBackward } from "./commands";
 import { livePreview } from "./inline";
-import type { MarksMode } from "./reveal";
+import { type MarksMode, focusTracking } from "./reveal";
 import { Wikilink } from "./wikilink";
 
 export type ViewMode = "formatted" | "source";
@@ -64,6 +64,7 @@ function sourceMode(): Extension {
 function formattedMode(opts: EditorOptions): Extension {
   return [
     EditorView.editorAttributes.of({ class: MARKS_MODE === "dim" ? "pc-formatted pc-dim" : "pc-formatted" }),
+    focusTracking,
     livePreview({ marks: MARKS_MODE, onOpenUrl: opts.onOpenUrl }),
     blockPreview({ marks: MARKS_MODE }),
     // Only where marks are hidden: in Source view Backspace must delete one character.

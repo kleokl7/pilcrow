@@ -1,7 +1,7 @@
 import { type EditorState, type Extension, type Range, StateField } from "@codemirror/state";
 import { Decoration, type DecorationSet, EditorView, WidgetType } from "@codemirror/view";
 import { syntaxTree } from "@codemirror/language";
-import { type MarksMode, selectionTouches } from "./reveal";
+import { type MarksMode, selectionTouches, setFocused } from "./reveal";
 
 export type Align = "left" | "center" | "right" | null;
 export interface ParsedTable {
@@ -170,7 +170,8 @@ function build(state: EditorState): DecorationSet {
 export const blockField = StateField.define<DecorationSet>({
   create: build,
   update(value, tr) {
-    if (tr.docChanged || tr.selection || syntaxTree(tr.startState) !== syntaxTree(tr.state)) return build(tr.state);
+    const focusChanged = tr.effects.some((e) => e.is(setFocused));
+    if (tr.docChanged || tr.selection || focusChanged || syntaxTree(tr.startState) !== syntaxTree(tr.state)) return build(tr.state);
     return value;
   },
   provide: (field) => [EditorView.decorations.from(field), EditorView.atomicRanges.of((view) => view.state.field(field))],
