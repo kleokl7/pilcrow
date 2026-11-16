@@ -1,0 +1,19 @@
+/* CodeMirror, both modes */
+.cm-editor { height: 100%; background: var(--paper); color: var(--ink); }
+.cm-editor.cm-focused { outline: none; }
+.cm-scroller { overflow: auto; font-family: var(--ui); font-size: 17px; line-height: 1.5; -webkit-overflow-scrolling: touch; }
+.cm-content { padding: 6px 0 40vh; caret-color: var(--caret); }
+.cm-line { padding: 0 18px 0 34px; }
+.cm-cursor, .cm-dropCursor { border-left: 2px solid var(--caret); margin-left: -1px; }
+.cm-selectionBackground, .cm-content ::selection { background: color-mix(in srgb, var(--mark) 22%, transparent) !important; }
+.cm-panels { background: var(--surface); color: var(--ink); border-bottom: 1px solid var(--rule); font-family: var(--ui); }
+.cm-panels input, .cm-panels button { font: inherit; }
+.cm-searchMatch { background: color-mix(in srgb, var(--mark) 25%, transparent); }
+
+/* Source view: the note exactly as it is stored */
+.pc-source .cm-scroller { font-family: var(--mono); font-size: 14px; line-height: 1.6; }
+.pc-source .cm-line { padding: 0 14px 0 18px; }
+.pc-tok-mark { color: var(--mark); }
+.pc-tok-dim { color: var(--ink-2); }
+.pc-source .pc-tok-heading, .pc-source .pc-tok-strong { font-weight: 600; }
+.pc-source .pc-tok-em { font-style: italic; }

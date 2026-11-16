@@ -1,1 +1,2 @@
-html, body { height: 100%; margin: 0; }
+html, body { height: 100%; margin: 0; background: var(--paper); color: var(--ink); font-family: var(--ui); }
+#app { height: 100%; display: flex; flex-direction: column; }

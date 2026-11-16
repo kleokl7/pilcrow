@@ -1,0 +1,35 @@
+/* Warm paper palette. Light and dark follow the system. */
+:root {
+  --ui: "Atkinson Hyperlegible Next", system-ui, sans-serif;
+  --mono: "Atkinson Hyperlegible Mono", ui-monospace, monospace;
+
+  --paper: #F9F3E7;
+  --surface: #F0E9DA;
+  --key: #FFFBF2;
+  --ink: #34322C;
+  --ink-2: #6E6A5C;
+  --ink-3: #9A9684;
+  --rule: #E6E3D8;
+  --mark: #B0532F;       /* every Markdown mark and every link */
+  --mark-tint: #F1DCC4;
+  --wash: #F5EBDD;
+  --caret: #C15F3C;      /* the cursor, and anything that is not saved */
+  color-scheme: light;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --paper: #262624;
+    --surface: #1F1E1D;
+    --key: #393833;
+    --ink: #E6E4DC;
+    --ink-2: #A8A496;
+    --ink-3: #767264;
+    --rule: #393833;
+    --mark: #E8916F;
+    --mark-tint: #3A3128;
+    --wash: #2E2B27;
+    --caret: #D97757;
+    color-scheme: dark;
+  }
+}
