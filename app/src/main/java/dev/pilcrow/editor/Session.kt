@@ -51,6 +51,8 @@ class Session(
     private var controller: SaveController? = null
     private var offeredDraftId: String? = null
     private var copyBytes: ByteArray? = null
+    /** Said by the next web app once it is ready: why the note it would have shown was closed. */
+    private var nextNotice: String? = null
     /** The recent entry whose file the user is looking for in the picker. The file they pick takes its place. */
     private var findingId: String? = null
 
@@ -67,6 +69,19 @@ class Session(
         val waiting = pending
         pending = null
         if (waiting != null) load(waiting.uri, waiting.canWrite, waiting.fromPicker) else emitHome()
+        nextNotice?.let { notice(it) }
+        nextNotice = null
+    }
+
+    /**
+     * The web app is gone: its screen was stopped because a page hung it, or Android stopped it. The note is saved
+     * and closed, and calls wait for the new web app, which is told why.
+     */
+    fun onRendererGone() {
+        webReady = false
+        if (controller != null) nextNotice = "The screen stopped working, so Pilcrow closed the note. Open it again to go on."
+        controller?.flush()
+        retire()
     }
 
     fun openPicker() {

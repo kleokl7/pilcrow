@@ -110,3 +110,16 @@ test("the web app talks to Android with one JSON message per call", () => {
   ]);
   delete (window as unknown as { PilcrowNative?: unknown }).PilcrowNative;
 });
+
+test("a file that cannot be drawn says so and keeps its source", async () => {
+  const csv = await import("../src/views/csv");
+  const spy = vi.spyOn(csv, "renderCsv").mockImplementation(() => {
+    throw new Error("boom");
+  });
+  const { root, send, button } = setup();
+  send(doc("csv", "Trip.csv", "a,b"));
+  expect(root.querySelector(".pc-view")!.textContent).toBe("This file could not be shown. The ¶ button shows its source.");
+  button("Show source").click();
+  expect(root.querySelector(".cm-content")!.textContent).toBe("a,b");
+  spy.mockRestore();
+});

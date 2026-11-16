@@ -54,12 +54,31 @@ class PageServer(private val newId: () -> String = { UUID.randomUUID().toString(
 
         private val NOT_FOUND = Response(404, "Not Found", mapOf("Cache-Control" to "no-store"), ByteArray(0))
 
-        /** Leading comments and the doctype. Anything put before the doctype would switch the page to quirks mode. */
-        private val PROLOGUE = Regex("""^﻿?(?:\s|<!--[\s\S]*?-->)*<!doctype[^>]*>""", RegexOption.IGNORE_CASE)
-
         private fun withHelper(html: String, helper: String): String {
-            val end = PROLOGUE.find(html)?.range?.last?.plus(1) ?: 0
+            val end = afterDoctype(html)
             return html.substring(0, end) + helper + html.substring(end)
+        }
+
+        /**
+         * Where the leading spaces, comments and doctype end; 0 when there is no doctype. Anything put before the
+         * doctype would switch the page to quirks mode. A plain scan, not a pattern, so no page can make it slow.
+         */
+        private fun afterDoctype(html: String): Int {
+            var i = if (html.startsWith("\uFEFF")) 1 else 0
+            while (i < html.length) {
+                if (html[i].isWhitespace()) {
+                    i++
+                } else if (html.startsWith("<!--", i)) {
+                    val end = html.indexOf("-->", i + 4)
+                    if (end < 0) return 0
+                    i = end + 3
+                } else {
+                    break
+                }
+            }
+            if (!html.regionMatches(i, "<!doctype", 0, 9, ignoreCase = true)) return 0
+            val close = html.indexOf('>', i)
+            return if (close < 0) 0 else close + 1
         }
 
         /**

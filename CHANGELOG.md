@@ -24,7 +24,8 @@
   scripts and pictures. The app's own screens still load nothing from outside.
 - The connection between the app's page and Android is now offered to the app's own page
   only, and each message is checked on arrival. An HTML page runs in a sandbox, from an
-  address of its own, and cannot reach it.
+  address of its own, and cannot reach it. A link opens the browser only for a tap. A page
+  that hangs the screen is stopped, and the note is closed with a message.
 
 ## 0.1.0 (2026-11-16)
 

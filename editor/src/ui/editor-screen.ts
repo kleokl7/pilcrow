@@ -120,9 +120,14 @@ export function renderEditorScreen(opts: EditorScreenOptions): EditorScreen {
       page = createPageView();
       view.replaceChildren(page.el);
       opts.onPreparePage(`p${++pageRef}`, text);
-    } else {
-      page = null;
+      return;
+    }
+    page = null;
+    try {
       view.replaceChildren(opts.kind === "svg" ? renderSvg(text) : renderCsv(text, opts.name));
+    } catch {
+      // A file this view cannot handle must not take the screen down with it: the source still works.
+      view.replaceChildren(h("p", { class: "pc-empty" }, "This file could not be shown. The ¶ button shows its source."));
     }
   };
 

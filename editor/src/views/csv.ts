@@ -1,7 +1,8 @@
 import { h } from "../ui/dom";
 
-/** Rows past this many are left out of the table; the source view has them all. */
+/** Rows and columns past these are left out of the table; the source view has them all. */
 export const MAX_ROWS = 1000;
+export const MAX_COLUMNS = 200;
 
 /** Splits CSV text into rows of cells: quoted cells may hold the delimiter, doubled quotes and line breaks (RFC 4180). */
 export function parseCsv(text: string, delimiter: string): string[][] {
@@ -63,7 +64,10 @@ const NUMBER = /^[-+]?[$€£¥]?\d[\d,.\s]*%?$/;
 export function renderCsv(text: string, name: string): HTMLElement {
   const rows = parseCsv(text, delimiterFor(name, text));
   if (!rows.length) return h("div", { class: "pc-csv" }, h("p", { class: "pc-empty" }, "This file is empty."));
-  const width = Math.max(...rows.map((r) => r.length));
+  // A loop, not Math.max(...rows): spreading a long file overflows the engine's argument list.
+  let columns = 0;
+  for (const r of rows) columns = Math.max(columns, r.length);
+  const width = Math.min(columns, MAX_COLUMNS);
   const [header, ...body] = rows;
   const shown = body.slice(0, MAX_ROWS);
   const numeric = Array.from({ length: width }, (_, col) => {
@@ -75,9 +79,12 @@ export function renderCsv(text: string, name: string): HTMLElement {
 
   const table = h("table", { class: "pc-table pc-csv-table" }, h("thead", {}, line("th", header)), h("tbody", {}, ...shown.map((r) => line("td", r))));
   const el = h("div", { class: "pc-csv" }, table);
+  const count = (n: number) => n.toLocaleString("en-US");
   if (body.length > shown.length) {
-    const count = (n: number) => n.toLocaleString("en-US");
     el.append(h("p", { class: "pc-csv-more" }, `Showing the first ${count(shown.length)} of ${count(body.length)} rows. The source has them all.`));
+  }
+  if (columns > width) {
+    el.append(h("p", { class: "pc-csv-more" }, `Showing the first ${count(width)} of ${count(columns)} columns. The source has them all.`));
   }
   return el;
 }

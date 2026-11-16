@@ -51,6 +51,8 @@ A web page you open runs its scripts, so Pilcrow keeps it apart from everything 
   your notes.
 - It cannot move Pilcrow to another page or open anything by itself. A link opens in your
   browser only when you tap it.
+- Everything below Pilcrow's bar is the page. Pilcrow itself never asks for a password there.
+- A page that hangs, say in an endless loop, is stopped: Pilcrow closes the note and tells you.
 - It cannot keep data between visits, and it cannot load files that sit next to it in Drive,
   because Android gives Pilcrow the one file you opened, not its folder.
 - On a phone whose Android System WebView is too old to keep the page apart this way
@@ -61,7 +63,7 @@ A web page you open runs its scripts, so Pilcrow keeps it apart from everything 
 ## Status
 
 Pilcrow is at **0.1.1**, and it is young. The editor, the save logic and the page sandbox
-are covered by 219 automated tests. The 0.1.0 release build was run on an Android 16
+are covered by 225 automated tests. The 0.1.0 release build was run on an Android 16
 emulator: it opened a local note, saved typed text and a ticked checkbox back to the file, and
 switched views. Testing on real phones against Google Drive has only just started, and the
 HTML, SVG and CSV views of 0.1.1 are the newest part. What changed is in the

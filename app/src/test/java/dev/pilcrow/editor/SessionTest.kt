@@ -479,6 +479,24 @@ class SessionTest {
         assertTrue(drafts.list().isEmpty())
     }
 
+    @Test fun `when the screen stops, the note is saved and closed, and the next screen says why`() {
+        openNote()
+        type("one more\n")
+        session.onRendererGone()
+        assertEquals("one more\n", String(drive.bytes(uri)))
+        emitted.clear()
+        drive.put("content://drive/2", "Other.md", "x".toByteArray())
+        session.openUri("content://drive/2", canWrite = true, fromPicker = false)
+        assertTrue("waits for the new screen", emitted.isEmpty())
+        session.onWebReady()
+        assertEquals(listOf("settings", "document"), types().take(2))
+        assertEquals("notice", types().last())
+        assertEquals("The screen stopped working, so Pilcrow closed the note. Open it again to go on.", last("notice").getString("message"))
+        session.closeDocument()
+        session.onWebReady()
+        assertEquals(1, types().count { it == "notice" })
+    }
+
     @Test fun `settings are sent first when the web app is ready`() {
         settings.viewMode = "source"
         settings.lineNumbers = true

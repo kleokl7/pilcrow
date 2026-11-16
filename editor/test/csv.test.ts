@@ -56,3 +56,16 @@ test("a long file shows its first thousand rows and says so", () => {
 test("an empty file says so", () => {
   expect(renderCsv("", "x.csv").textContent).toBe("This file is empty.");
 });
+
+test("a very long file does not overflow the browser's argument list", () => {
+  const text = "n\n" + "1\n".repeat(200_000);
+  expect(() => renderCsv(text, "x.csv")).not.toThrow();
+});
+
+test("a very wide file shows its first 200 columns and says so", () => {
+  const text = Array.from({ length: 5000 }, (_, i) => `c${i}`).join(",") + "\n" + "1,".repeat(4999) + "1\n";
+  const el = renderCsv(text, "x.csv");
+  expect(el.querySelectorAll("th").length).toBe(200);
+  expect(el.querySelectorAll("tbody td").length).toBe(200);
+  expect(el.textContent).toContain("Showing the first 200 of 5,000 columns.");
+});

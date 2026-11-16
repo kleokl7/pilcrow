@@ -49,6 +49,17 @@ class PageServerTest {
         assertTrue(text.endsWith("</script>\n<html><body>x</body></html>"))
     }
 
+    @Test(timeout = 2_000) fun `many comments before no doctype take no time at all`() {
+        // A backtracking pattern needed minutes for this on Android; the scan is linear.
+        val html = "<!---->".repeat(50_000) + "<p>x</p>"
+        assertTrue(body(get(pages.prepare(html, scripts = true))).startsWith("<script>"))
+    }
+
+    @Test fun `an unclosed comment or a doctype without its end gets the helper first`() {
+        assertTrue(body(get(pages.prepare("<!-- never closed <!doctype html>", scripts = true))).startsWith("<script>"))
+        assertTrue(body(get(pages.prepare("<!doctype html", scripts = true))).startsWith("<script>"))
+    }
+
     @Test fun `a page without a doctype gets the link helper first`() {
         assertTrue(body(get(pages.prepare("<p>hi</p>", scripts = true))).startsWith("<script>"))
     }
