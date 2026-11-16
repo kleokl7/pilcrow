@@ -1,2 +1,12 @@
 html, body { height: 100%; margin: 0; background: var(--paper); color: var(--ink); font-family: var(--ui); }
 #app { height: 100%; display: flex; flex-direction: column; }
+
+/* The formatting bar above the keyboard */
+.pc-toolbar { height: 46px; flex: none; display: flex; align-items: center; border-top: 1px solid var(--rule); background: var(--paper); color: var(--ink-2); }
+.pc-tb-scroll { flex: 1; min-width: 0; display: flex; overflow-x: auto; scrollbar-width: none; padding-left: 6px; }
+.pc-tb-scroll::-webkit-scrollbar { display: none; }
+.pc-tb-fixed { flex: none; display: flex; padding: 0 6px 0 4px; border-left: 1px solid var(--rule); }
+.pc-tb { width: 40px; height: 44px; flex: none; padding: 0; border: 0; border-radius: 8px; background: none; color: inherit; font: 600 17px var(--ui); display: grid; place-items: center; -webkit-tap-highlight-color: transparent; }
+.pc-tb:active { background: var(--surface); color: var(--ink); }
+.pc-tb svg { width: 21px; height: 21px; fill: none; stroke: currentColor; stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; }
+.pc-tb-italic { font-style: italic; font-weight: 400; }

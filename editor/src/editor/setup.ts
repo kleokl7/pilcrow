@@ -1,4 +1,4 @@
-import { Annotation, Compartment, EditorState, type Extension } from "@codemirror/state";
+import { Annotation, Compartment, EditorState, type Extension, Prec } from "@codemirror/state";
 import { EditorView, drawSelection, keymap } from "@codemirror/view";
 import { defaultKeymap, history, historyKeymap } from "@codemirror/commands";
 import { HighlightStyle, syntaxHighlighting } from "@codemirror/language";
@@ -7,6 +7,7 @@ import { yamlFrontmatter } from "@codemirror/lang-yaml";
 import { search, searchKeymap } from "@codemirror/search";
 import { tags as t } from "@lezer/highlight";
 import { blockPreview } from "./blocks";
+import { continueList, deleteHiddenMarkBackward } from "./commands";
 import { livePreview } from "./inline";
 import type { MarksMode } from "./reveal";
 import { Wikilink } from "./wikilink";
@@ -65,6 +66,8 @@ function formattedMode(opts: EditorOptions): Extension {
     EditorView.editorAttributes.of({ class: MARKS_MODE === "dim" ? "pc-formatted pc-dim" : "pc-formatted" }),
     livePreview({ marks: MARKS_MODE, onOpenUrl: opts.onOpenUrl }),
     blockPreview({ marks: MARKS_MODE }),
+    // Only where marks are hidden: in Source view Backspace must delete one character.
+    MARKS_MODE === "hide" ? Prec.high(keymap.of([{ key: "Backspace", run: deleteHiddenMarkBackward }])) : [],
   ];
 }
 
@@ -95,6 +98,7 @@ export function createEditor(opts: EditorOptions): PilcrowEditor {
         EditorView.lineWrapping,
         markdownLanguage(),
         search({ top: true }),
+        Prec.high(keymap.of([{ key: "Enter", run: continueList }])),
         keymap.of([...defaultKeymap, ...historyKeymap, ...searchKeymap]),
         EditorState.readOnly.of(opts.readOnly),
         EditorView.editable.of(!opts.readOnly),
